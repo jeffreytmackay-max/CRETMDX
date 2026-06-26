@@ -52,12 +52,12 @@ export default function MapView() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-8 py-4">
+      <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-4 md:flex-row md:items-center md:justify-between md:px-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Location Map</h1>
           <p className="text-sm text-slate-500">{filtered.length} sites across the portfolio</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {types.map((t) => (
             <button
               key={t}

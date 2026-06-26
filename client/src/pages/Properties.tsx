@@ -61,8 +61,8 @@ export default function Properties() {
   if (loading) return <Spinner />;
 
   return (
-    <div className="p-8">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="p-4 md:p-8">
+      <div className="mb-6 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Properties</h1>
           <p className="text-sm text-slate-500">{properties.length} sites in the portfolio</p>
@@ -70,8 +70,8 @@ export default function Properties() {
         <Button onClick={() => setEditing(EMPTY)}>+ Add Property</Button>
       </div>
 
-      <Card>
-        <table className="w-full text-sm">
+      <Card className="overflow-x-auto scroll-touch">
+        <table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-5 py-3">Name</th>
