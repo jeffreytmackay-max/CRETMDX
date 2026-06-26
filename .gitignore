@@ -15,3 +15,7 @@ server/data/*.db
 
 # TS build info
 *.tsbuildinfo
+
+# Extra build/test outputs
+client/dist-single/
+scratchpad-test/

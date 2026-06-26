@@ -6,57 +6,62 @@ import type {
   ScheduleRow,
   ComparisonResult,
 } from './types';
+import { store, leaseTermYears, resetData } from './store';
+import { buildLeaseCashflows, compareLeaseVsBuy } from './finance';
 
-const BASE = '/api';
+// Browser-only API: same async surface the pages already use, backed by
+// localStorage instead of a REST server. Swapping this file back to fetch()
+// restores the full-stack mode without touching any page component.
 
-async function http<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText);
-    throw new Error(`${res.status} ${text}`);
-  }
-  if (res.status === 204) return undefined as T;
-  return res.json();
-}
+const ok = <T>(v: T): Promise<T> => Promise.resolve(v);
 
 export const api = {
-  dashboard: () => http<DashboardData>('/dashboard'),
+  dashboard: () => ok<DashboardData>(store.dashboard()),
 
   // Properties
-  properties: () => http<Property[]>('/properties'),
-  property: (id: number) => http<Property>(`/properties/${id}`),
-  createProperty: (body: Partial<Property>) =>
-    http<Property>('/properties', { method: 'POST', body: JSON.stringify(body) }),
+  properties: () => ok<Property[]>(store.listProperties()),
+  property: (id: number) => ok(store.getProperty(id) as Property),
+  createProperty: (body: Partial<Property>) => ok(store.createProperty(body)),
   updateProperty: (id: number, body: Partial<Property>) =>
-    http<Property>(`/properties/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  deleteProperty: (id: number) => http<void>(`/properties/${id}`, { method: 'DELETE' }),
+    ok(store.updateProperty(id, body) as Property),
+  deleteProperty: (id: number) => ok(store.deleteProperty(id)),
 
   // Leases
-  leases: () => http<Lease[]>('/leases-enriched'),
-  lease: (id: number) => http<Lease>(`/leases/${id}`),
-  leaseSchedule: (id: number) =>
-    http<{ lease: Lease; termYears: number; schedule: ScheduleRow[] }>(`/leases/${id}/schedule`),
-  createLease: (body: Partial<Lease>) =>
-    http<Lease>('/leases', { method: 'POST', body: JSON.stringify(body) }),
-  updateLease: (id: number, body: Partial<Lease>) =>
-    http<Lease>(`/leases/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  deleteLease: (id: number) => http<void>(`/leases/${id}`, { method: 'DELETE' }),
+  leases: () => ok<Lease[]>(store.listLeasesEnriched()),
+  lease: (id: number) => ok(store.getLease(id) as Lease),
+  leaseSchedule: (id: number) => {
+    const lease = store.getLease(id) as Lease;
+    const termYears = leaseTermYears(lease.commencement_date, lease.expiration_date);
+    const schedule: ScheduleRow[] = buildLeaseCashflows({
+      rentableSqft: lease.rentable_sqft || 0,
+      baseRentAnnual: lease.base_rent_annual || 0,
+      escalationPct: lease.escalation_pct || 0,
+      opexPsf: lease.opex_psf || 0,
+      freeRentMonths: lease.free_rent_months || 0,
+      tiAllowancePsf: lease.ti_allowance_psf || 0,
+      termYears: Math.max(1, termYears),
+      discountRate: 0.08,
+    });
+    return ok({ lease, termYears, schedule });
+  },
+  createLease: (body: Partial<Lease>) => ok(store.createLease(body)),
+  updateLease: (id: number, body: Partial<Lease>) => ok(store.updateLease(id, body) as Lease),
+  deleteLease: (id: number) => ok(store.deleteLease(id)),
 
   // Transactions
-  transactions: () => http<Transaction[]>('/transactions'),
-  createTransaction: (body: Partial<Transaction>) =>
-    http<Transaction>('/transactions', { method: 'POST', body: JSON.stringify(body) }),
+  transactions: () => ok<Transaction[]>(store.listTransactions()),
+  createTransaction: (body: Partial<Transaction>) => ok(store.createTransaction(body)),
   updateTransaction: (id: number, body: Partial<Transaction>) =>
-    http<Transaction>(`/transactions/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-  deleteTransaction: (id: number) => http<void>(`/transactions/${id}`, { method: 'DELETE' }),
+    ok(store.updateTransaction(id, body) as Transaction),
+  deleteTransaction: (id: number) => ok(store.deleteTransaction(id)),
 
   // Financial
   compare: (lease: object, buy: object) =>
-    http<ComparisonResult>('/financial/compare', {
-      method: 'POST',
-      body: JSON.stringify({ lease, buy }),
-    }),
+    ok<ComparisonResult>(compareLeaseVsBuy(lease as never, buy as never)),
+
+  // Utility
+  reset: () => {
+    resetData();
+    return ok(undefined);
+  },
 };

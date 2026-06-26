@@ -22,7 +22,38 @@ core workflows plus an interactive location map:
 - **Data** — A SQLite file is created and seeded with a realistic 12-property
   sample portfolio (offices, industrial, retail, warehouse) across US markets.
 
-## Getting started
+## Two ways to run
+
+This project ships in two modes:
+
+1. **Browser-only (no server)** — the app runs entirely in the browser with the
+   sample portfolio built in and your edits saved to `localStorage`. This is what
+   gets deployed to GitHub Pages and what the single-file build uses. No backend
+   needed.
+2. **Full-stack (shared database)** — the original Express + `node:sqlite` API with
+   a real database. Restore it by pointing `client/src/lib/api.ts` back at `fetch`
+   (the file documents this) and running the server below.
+
+### Open it instantly (single file)
+
+```bash
+npm --prefix client install
+npm --prefix client run build:single
+# Open the result in any browser — no server required:
+#   client/dist-single/index.html
+```
+
+A prebuilt copy is also committed at the repo root as **`CRETMDX-app.html`** — just
+download and open it.
+
+### Deploy a live link (GitHub Pages)
+
+A workflow at `.github/workflows/deploy.yml` builds the app and publishes it to
+GitHub Pages on every push. GitHub Pages requires the repo to be **public** (free
+plan) or on a paid plan. Once enabled, the link is:
+`https://jeffreytmackay-max.github.io/CRETMDX/`
+
+## Full-stack getting started
 
 ```bash
 # 1. Install all dependencies (root, server, client)
