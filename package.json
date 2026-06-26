@@ -1,0 +1,18 @@
+{
+  "name": "cretmdx",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Corporate Real Estate Portfolio Management Tool — Lease Administration, Transaction Management, Financial Modeling, and a visual location map.",
+  "scripts": {
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "seed": "npm --prefix server run seed",
+    "start": "npm --prefix server run start"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
