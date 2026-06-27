@@ -21,6 +21,7 @@ import {
   downloadCsv,
 } from '../lib/reports';
 import { Button, Card, SectionTitle, Spinner, StatCard } from '../components/ui';
+import { Monogram } from '../components/Logo';
 
 type ReportKey = 'summary' | 'rentroll' | 'expirations' | 'obligations' | 'critical' | 'pipeline';
 
@@ -135,9 +136,20 @@ export default function Reports() {
       </div>
 
       {/* Print header (visible on paper) */}
-      <div className="mb-5 hidden border-b border-slate-300 pb-3 print:block">
-        <div className="text-xl font-bold text-slate-900">CRETMDX — {reportTitle}</div>
-        <div className="text-sm text-slate-500">Generated {today}</div>
+      <div className="mb-5 hidden items-center justify-between border-b-2 border-[#9D2235] pb-3 print:flex">
+        <div className="flex items-center gap-2.5">
+          <Monogram className="h-8 w-8 text-[#9D2235]" />
+          <div className="leading-none">
+            <div className="text-lg font-bold tracking-tight text-slate-900">TransMedics</div>
+            <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+              Real Estate Portfolio
+            </div>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="text-base font-semibold text-[#9D2235]">{reportTitle}</div>
+          <div className="text-xs text-slate-500">Generated {today}</div>
+        </div>
       </div>
 
       {report === 'summary' && <SummaryReport properties={properties} leases={leases} data={data} />}
@@ -146,6 +158,11 @@ export default function Reports() {
       {report === 'obligations' && <ObligationsReport rows={data.obl} />}
       {report === 'critical' && <CriticalReport rows={data.crit} />}
       {report === 'pipeline' && <PipelineReport rows={data.pipe} />}
+
+      {/* Print footer (visible on paper) */}
+      <div className="mt-8 hidden border-t border-slate-300 pt-2 text-[10px] uppercase tracking-wider text-slate-400 print:block">
+        TransMedics — Real Estate Portfolio · Confidential · Generated {today}
+      </div>
     </div>
   );
 }

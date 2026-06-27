@@ -525,32 +525,50 @@ function printAbstract(lease: Lease, termYears: number, schedule: ScheduleRow[])
     month: 'long',
     day: 'numeric',
   });
+  const monogram = `<svg viewBox="0 0 64 64" width="30" height="30" fill="none" style="flex:0 0 auto"><path d="M14 53 V31 A9 9 0 0 1 32 31 V53 M32 31 A9 9 0 0 1 50 31 V53" stroke="#ffffff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(lease.lease_name)} — Lease Abstract</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-  body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#0f172a;margin:32px;}
-  h1{font-size:20px;margin:0 0 2px;} .sub{color:#64748b;font-size:13px;margin-bottom:18px;}
-  h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin:22px 0 8px;}
+  body{font-family:'Mulish',ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#302F32;margin:0;}
+  .page{margin:32px;}
+  .brandbar{display:flex;align-items:center;justify-content:space-between;background:#9D2235;color:#fff;padding:14px 32px;}
+  .brandbar .lockup{display:flex;align-items:center;gap:10px;}
+  .brandbar .name{font-weight:800;font-size:17px;letter-spacing:-0.01em;line-height:1;}
+  .brandbar .desc{font-size:10px;text-transform:uppercase;letter-spacing:.12em;opacity:.85;margin-top:3px;}
+  .brandbar .doc{text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.12em;opacity:.9;}
+  h1{font-size:21px;margin:18px 0 2px;color:#302F32;}
+  .sub{color:#75787B;font-size:13px;margin-bottom:18px;}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#9D2235;font-weight:800;margin:22px 0 8px;}
   table{width:100%;border-collapse:collapse;font-size:13px;} td,th{padding:6px 8px;text-align:left;}
-  .facts td:first-child{color:#64748b;width:38%;} .facts td:last-child{text-align:right;font-weight:600;}
-  .facts tr{border-bottom:1px solid #f1f5f9;}
-  .sched th{border-bottom:1px solid #cbd5e1;color:#64748b;font-size:11px;text-transform:uppercase;}
-  .sched td{border-bottom:1px solid #f1f5f9;} .sched td.n,.sched th.n{text-align:right;font-variant-numeric:tabular-nums;}
-  .notes{white-space:pre-wrap;background:#f8fafc;border-radius:8px;padding:12px;font-size:12px;color:#334155;}
-  @media print{body{margin:0;}}
+  .facts td:first-child{color:#75787B;width:38%;} .facts td:last-child{text-align:right;font-weight:700;}
+  .facts tr{border-bottom:1px solid #EFECEA;}
+  .sched th{border-bottom:1px solid #DAD3D1;color:#75787B;font-size:11px;text-transform:uppercase;}
+  .sched td{border-bottom:1px solid #EFECEA;} .sched td.n,.sched th.n{text-align:right;font-variant-numeric:tabular-nums;}
+  .notes{white-space:pre-wrap;background:#f8f6f5;border-left:3px solid #9D2235;border-radius:8px;padding:12px;font-size:12px;color:#44414F;}
+  .foot{margin:24px 32px 0;border-top:1px solid #DAD3D1;padding-top:8px;font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#9b9491;}
+  @media print{.brandbar{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
 </style></head><body>
-  <h1>${esc(lease.lease_name)}</h1>
-  <div class="sub">Lease Abstract · Generated ${esc(generated)}</div>
-  <table class="facts">${facts.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>
-  <h2>Rent Schedule</h2>
-  <table class="sched"><thead><tr><th>Year</th><th class="n">Base Rent</th><th class="n">OpEx</th><th class="n">Free Rent</th><th class="n">Net Cost</th></tr></thead>
-  <tbody>${schedule
-    .map(
-      (r) =>
-        `<tr><td>Year ${r.year}</td><td class="n">${esc(usd(r.baseRent))}</td><td class="n">${esc(usd(r.opex))}</td><td class="n">${r.freeRent ? '(' + esc(usd(r.freeRent)) + ')' : '—'}</td><td class="n">${esc(usd(r.netCost))}</td></tr>`,
-    )
-    .join('')}</tbody></table>
-  ${lease.notes ? `<h2>Notes &amp; Abstract</h2><div class="notes">${esc(lease.notes)}</div>` : ''}
-  <script>window.onload=function(){window.print();}</script>
+  <div class="brandbar">
+    <div class="lockup">${monogram}<div><div class="name">TransMedics</div><div class="desc">Real Estate Portfolio</div></div></div>
+    <div class="doc">Lease Abstract</div>
+  </div>
+  <div class="page">
+    <h1>${esc(lease.lease_name)}</h1>
+    <div class="sub">Generated ${esc(generated)}</div>
+    <table class="facts">${facts.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>
+    <h2>Rent Schedule</h2>
+    <table class="sched"><thead><tr><th>Year</th><th class="n">Base Rent</th><th class="n">OpEx</th><th class="n">Free Rent</th><th class="n">Net Cost</th></tr></thead>
+    <tbody>${schedule
+      .map(
+        (r) =>
+          `<tr><td>Year ${r.year}</td><td class="n">${esc(usd(r.baseRent))}</td><td class="n">${esc(usd(r.opex))}</td><td class="n">${r.freeRent ? '(' + esc(usd(r.freeRent)) + ')' : '—'}</td><td class="n">${esc(usd(r.netCost))}</td></tr>`,
+      )
+      .join('')}</tbody></table>
+    ${lease.notes ? `<h2>Notes &amp; Abstract</h2><div class="notes">${esc(lease.notes)}</div>` : ''}
+  </div>
+  <div class="foot">TransMedics — Real Estate Portfolio · Confidential · Generated ${esc(generated)}</div>
+  <script>window.onload=function(){setTimeout(function(){window.print();},250);}</script>
 </body></html>`;
 
   const w = window.open('', '_blank');
