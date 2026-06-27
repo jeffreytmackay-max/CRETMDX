@@ -10,6 +10,7 @@ core workflows plus an interactive location map:
 | **Properties** | CRUD for buildings — location, type, rentable area, market, coordinates. |
 | **Lease Administration** | Lease abstracts, critical-date tracking (expiration + notice dates), auto-generated rent schedules (escalations, free rent, OpEx, TI), and **AI PDF abstraction** — upload one or many lease PDFs and Claude extracts the key terms and translates foreign-language clauses into English. Original PDFs are attached to each lease record. |
 | **Compare Leases** | Side-by-side comparison of up to four leases, with the most favorable value highlighted per row (incl. computed rent/SF, effective rent/SF, and total base rent over term). |
+| **Reports** | Rent roll, lease-expiration schedule, projected rent obligations by year, critical dates, deal pipeline, and a portfolio summary — each with **CSV export** and **Print / Save-as-PDF**. Individual leases also export a one-page printable abstract. |
 | **Settings** | Store your Anthropic API key (browser-only) for the PDF abstraction feature, and reset to the sample portfolio. |
 | **Transaction Management** | Drag-and-drop deal pipeline (kanban) across stages with weighted/gross value rollups. |
 | **Financial Modeling** | Lease-vs-buy NPV comparison with cash-flow projections, recommendation, and year-by-year detail. |

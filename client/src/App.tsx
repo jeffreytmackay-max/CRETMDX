@@ -7,6 +7,7 @@ import Leases from './pages/Leases';
 import Transactions from './pages/Transactions';
 import Financial from './pages/Financial';
 import Compare from './pages/Compare';
+import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 
 const NAV = [
@@ -17,6 +18,7 @@ const NAV = [
   { to: '/compare', label: 'Compare Leases', icon: '⊞' },
   { to: '/transactions', label: 'Transactions', icon: '⇄' },
   { to: '/financial', label: 'Financial Modeling', icon: '∑' },
+  { to: '/reports', label: 'Reports', icon: '🗎' },
   { to: '/settings', label: 'Settings', icon: '⚙' },
 ];
 
@@ -60,7 +62,7 @@ export default function App() {
   return (
     <div className="flex h-[100dvh] flex-col md:flex-row">
       {/* Desktop sidebar */}
-      <aside className="hidden w-60 flex-shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
+      <aside className="no-print hidden w-60 flex-shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
         <div className="border-b border-slate-200 px-5 py-4">
           <Brand />
         </div>
@@ -71,7 +73,7 @@ export default function App() {
       </aside>
 
       {/* Mobile top bar */}
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 pt-safe pl-safe md:hidden">
+      <header className="no-print flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 pt-safe pl-safe md:hidden">
         <Brand />
         <button
           aria-label="Open menu"
@@ -114,6 +116,7 @@ export default function App() {
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/financial" element={<Financial />} />
           <Route path="/compare" element={<Compare />} />
+          <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>

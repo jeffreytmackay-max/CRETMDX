@@ -33,6 +33,7 @@ export default function Leases() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
+  const [search, setSearch] = useState('');
   const [detailId, setDetailId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Partial<Lease> | null>(null);
   const [editingFile, setEditingFile] = useState<File | null>(null);
@@ -53,14 +54,23 @@ export default function Leases() {
   }, []);
 
   const filtered = useMemo(() => {
+    let rows = leases;
     if (filter === 'expiring')
-      return leases.filter((l) => {
+      rows = rows.filter((l) => {
         const m = monthsUntil(l.expiration_date);
         return m >= 0 && m <= 18;
       });
-    if (filter === 'active') return leases.filter((l) => l.status === 'Active');
-    return leases;
-  }, [leases, filter]);
+    else if (filter === 'active') rows = rows.filter((l) => l.status === 'Active');
+
+    const q = search.trim().toLowerCase();
+    if (q)
+      rows = rows.filter((l) =>
+        [l.lease_name, l.counterparty, l.property_name, l.lease_type, l.status]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q)),
+      );
+    return rows;
+  }, [leases, filter, search]);
 
   async function save(form: Partial<Lease>, file?: File | null) {
     let id = form.id;
@@ -107,18 +117,28 @@ export default function Leases() {
         </div>
       </div>
 
-      <div className="mb-4 flex gap-2">
-        {(['all', 'active', 'expiring'] as Filter[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`rounded-full px-3.5 py-1.5 text-xs font-medium capitalize transition ${
-              filter === f ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >
-            {f === 'expiring' ? 'Expiring ≤ 18 mo' : f}
-          </button>
-        ))}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex gap-2">
+          {(['all', 'active', 'expiring'] as Filter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-medium capitalize transition ${
+                filter === f ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {f === 'expiring' ? 'Expiring ≤ 18 mo' : f}
+            </button>
+          ))}
+        </div>
+        <div className="sm:w-64">
+          <Input
+            type="search"
+            placeholder="Search leases, tenants, properties…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
       </div>
 
       <Card className="overflow-x-auto scroll-touch">
@@ -461,6 +481,72 @@ function addMonths(date: string, months: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function esc(s: unknown): string {
+  return String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
+}
+
+// Opens a print-friendly one-page lease abstract in a new window (Save as PDF).
+function printAbstract(lease: Lease, termYears: number, schedule: ScheduleRow[]) {
+  const facts: [string, string][] = [
+    ['Property', lease.property_name || '—'],
+    ['Counterparty', lease.counterparty || '—'],
+    ['Role / Type', `${lease.role} · ${lease.lease_type}`],
+    ['Commencement', fmtDate(lease.commencement_date)],
+    ['Expiration', fmtDate(lease.expiration_date)],
+    ['Term', `${termYears} years`],
+    ['Rentable SF', num(lease.rentable_sqft)],
+    ['Base Rent (Yr 1)', usd(lease.base_rent_annual)],
+    ['Escalation', `${lease.escalation_pct}% / yr`],
+    ['OpEx', `${usd(lease.opex_psf, 2)} / sf`],
+    ['Free Rent', `${lease.free_rent_months} months`],
+    ['TI Allowance', `${usd(lease.ti_allowance_psf, 2)} / sf`],
+    ['Security Deposit', usd(lease.security_deposit)],
+    ['Notice Period', `${lease.notice_period_months} months`],
+    ['Renewal Options', lease.renewal_options || 'None'],
+  ];
+  const generated = new Date().toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(lease.lease_name)} — Lease Abstract</title>
+<style>
+  body{font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;color:#0f172a;margin:32px;}
+  h1{font-size:20px;margin:0 0 2px;} .sub{color:#64748b;font-size:13px;margin-bottom:18px;}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin:22px 0 8px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;} td,th{padding:6px 8px;text-align:left;}
+  .facts td:first-child{color:#64748b;width:38%;} .facts td:last-child{text-align:right;font-weight:600;}
+  .facts tr{border-bottom:1px solid #f1f5f9;}
+  .sched th{border-bottom:1px solid #cbd5e1;color:#64748b;font-size:11px;text-transform:uppercase;}
+  .sched td{border-bottom:1px solid #f1f5f9;} .sched td.n,.sched th.n{text-align:right;font-variant-numeric:tabular-nums;}
+  .notes{white-space:pre-wrap;background:#f8fafc;border-radius:8px;padding:12px;font-size:12px;color:#334155;}
+  @media print{body{margin:0;}}
+</style></head><body>
+  <h1>${esc(lease.lease_name)}</h1>
+  <div class="sub">Lease Abstract · Generated ${esc(generated)}</div>
+  <table class="facts">${facts.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join('')}</table>
+  <h2>Rent Schedule</h2>
+  <table class="sched"><thead><tr><th>Year</th><th class="n">Base Rent</th><th class="n">OpEx</th><th class="n">Free Rent</th><th class="n">Net Cost</th></tr></thead>
+  <tbody>${schedule
+    .map(
+      (r) =>
+        `<tr><td>Year ${r.year}</td><td class="n">${esc(usd(r.baseRent))}</td><td class="n">${esc(usd(r.opex))}</td><td class="n">${r.freeRent ? '(' + esc(usd(r.freeRent)) + ')' : '—'}</td><td class="n">${esc(usd(r.netCost))}</td></tr>`,
+    )
+    .join('')}</tbody></table>
+  ${lease.notes ? `<h2>Notes &amp; Abstract</h2><div class="notes">${esc(lease.notes)}</div>` : ''}
+  <script>window.onload=function(){window.print();}</script>
+</body></html>`;
+
+  const w = window.open('', '_blank');
+  if (!w) {
+    alert('Please allow pop-ups to print the abstract.');
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
 function LeaseDetail({
   id,
   hasPdf,
@@ -513,14 +599,22 @@ function LeaseDetail({
 
   return (
     <Modal title={lease.lease_name} onClose={onClose}>
-      {hasPdf && (
+      <div className="mb-3 flex flex-wrap gap-2">
         <button
-          onClick={() => openPdf(id)}
-          className="mb-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          onClick={() => printAbstract(lease, termYears, schedule)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
         >
-          📄 View original PDF
+          🖶 Print abstract / PDF
         </button>
-      )}
+        {hasPdf && (
+          <button
+            onClick={() => openPdf(id)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            📄 View original PDF
+          </button>
+        )}
+      </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
         {facts.map(([k, v]) => (
           <div key={k} className="contents">

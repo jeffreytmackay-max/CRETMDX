@@ -50,6 +50,27 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* Print styles — used by the Reports page (Print / Save as PDF) and lease
+   abstract printing. Hides app chrome and prints only the report content. */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  main {
+    overflow: visible !important;
+  }
+  body {
+    background: #ffffff;
+  }
+  .report-page {
+    padding: 0 !important;
+  }
+  /* Keep table rows from splitting across pages where possible */
+  tr {
+    break-inside: avoid;
+  }
+}
+
 /* Safe-area helpers for the notch / home indicator. */
 .pt-safe {
   padding-top: env(safe-area-inset-top);
