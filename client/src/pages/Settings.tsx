@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getApiKey, setApiKey } from '../lib/ai';
-import { resetData } from '../lib/store';
+import { resetData, clearData } from '../lib/store';
+import { clearAllPdfs } from '../lib/pdfStore';
 import { Button, Card, Field, Input, SectionTitle } from '../components/ui';
 
 export default function Settings() {
@@ -17,6 +18,19 @@ export default function Settings() {
   function reset() {
     if (confirm('Reset all data back to the seeded sample portfolio? This clears your edits.')) {
       resetData();
+      location.reload();
+    }
+  }
+
+  async function clearAll() {
+    if (
+      confirm(
+        'Clear ALL data and start empty? This removes every property, lease, transaction, and ' +
+          'attached PDF in THIS browser, and does not re-load the sample portfolio. This cannot be undone.',
+      )
+    ) {
+      clearData();
+      await clearAllPdfs();
       location.reload();
     }
   }
@@ -83,13 +97,24 @@ export default function Settings() {
 
         <Card className="p-5">
           <SectionTitle>Data</SectionTitle>
-          <p className="mb-4 text-sm text-slate-600">
-            This app stores your portfolio in this browser. You can reset it back to the seeded
-            sample portfolio at any time.
+          <p className="mb-3 text-sm text-slate-600">
+            Your portfolio is stored <strong>only in this browser</strong> on this device — there is
+            no shared server. Changes here do not affect the app on any other device or browser, and
+            each new browser starts with the sample portfolio.
           </p>
-          <Button variant="danger" onClick={reset}>
-            Reset to sample data
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" onClick={reset}>
+              Reset to sample data
+            </Button>
+            <Button variant="danger" onClick={clearAll}>
+              Clear all data (start empty)
+            </Button>
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            <strong>Reset</strong> reloads the sample portfolio. <strong>Clear all</strong> empties
+            everything in this browser and does not re-seed — use this to start from a blank
+            portfolio.
+          </p>
         </Card>
       </div>
     </div>

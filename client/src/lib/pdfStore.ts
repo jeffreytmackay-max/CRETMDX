@@ -70,6 +70,20 @@ export async function deletePdf(id: number): Promise<void> {
   }
 }
 
+export async function clearAllPdfs(): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(STORE, 'readwrite');
+      tx.objectStore(STORE).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function listPdfIds(): Promise<number[]> {
   try {
     const db = await openDb();

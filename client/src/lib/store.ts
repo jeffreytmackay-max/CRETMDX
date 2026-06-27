@@ -43,6 +43,13 @@ export function resetData(): void {
   db = load();
 }
 
+// Wipe to an empty portfolio. Unlike resetData(), this persists an empty store
+// so the sample data does NOT get re-seeded on the next load.
+export function clearData(): void {
+  db = { properties: [], leases: [], transactions: [] };
+  save(db);
+}
+
 const nextId = (rows: { id: number }[]) => rows.reduce((m, r) => Math.max(m, r.id), 0) + 1;
 
 // ---- Properties ----
