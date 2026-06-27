@@ -9,8 +9,8 @@ const TYPES = ['New Lease', 'Renewal', 'Expansion', 'Disposition', 'Acquisition'
 
 const STAGE_ACCENT: Record<string, string> = {
   Prospecting: 'border-t-slate-400',
-  LOI: 'border-t-blue-400',
-  Negotiation: 'border-t-violet-400',
+  LOI: 'border-t-[#c45957]',
+  Negotiation: 'border-t-[#ff7f41]',
   Legal: 'border-t-amber-400',
   Executed: 'border-t-emerald-400',
   Closed: 'border-t-emerald-600',

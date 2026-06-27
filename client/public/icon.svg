@@ -1,15 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="112" fill="#2563eb" />
-  <!-- skyline mark -->
-  <g fill="#ffffff">
-    <rect x="120" y="248" width="64" height="160" rx="8" />
-    <rect x="200" y="184" width="72" height="224" rx="8" />
-    <rect x="288" y="220" width="64" height="188" rx="8" />
-    <rect x="364" y="276" width="40" height="132" rx="8" opacity="0.85" />
-  </g>
-  <!-- location pin -->
-  <circle cx="232" cy="150" r="34" fill="#bfdbfe" />
-  <circle cx="232" cy="150" r="15" fill="#2563eb" />
-  <text x="256" y="470" font-family="Arial, sans-serif" font-size="64" font-weight="700"
-        text-anchor="middle" fill="#ffffff">CRE</text>
+  <rect width="512" height="512" rx="112" fill="#9D2235" />
+  <!-- interlocking "m" monogram -->
+  <path
+    d="M150 372 V250 A56 56 0 0 1 262 250 V372 M262 250 A56 56 0 0 1 374 250 V372"
+    fill="none" stroke="#ffffff" stroke-width="74"
+    stroke-linecap="round" stroke-linejoin="round" />
 </svg>

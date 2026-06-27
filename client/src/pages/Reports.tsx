@@ -242,7 +242,7 @@ function SummaryReport({
               <XAxis dataKey="year" tick={{ fontSize: 11 }} />
               <YAxis tickFormatter={(v) => usdCompact(v)} tick={{ fontSize: 11 }} width={55} />
               <Tooltip formatter={(v: number) => usd(v)} />
-              <Bar dataKey="Rent" fill="#2563eb" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="Rent" fill="#9D2235" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -288,7 +288,7 @@ function ExpirationsReport({ rows }: { rows: ReturnType<typeof expirationSchedul
               <XAxis dataKey="year" tick={{ fontSize: 11 }} />
               <YAxis tickFormatter={(v) => num(v)} tick={{ fontSize: 11 }} width={60} />
               <Tooltip formatter={(v: number) => `${num(v)} sf`} />
-              <Bar dataKey="SF" fill="#ea580c" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="SF" fill="#FF7F41" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -321,7 +321,7 @@ function ObligationsReport({ rows }: { rows: ReturnType<typeof futureObligations
               <XAxis dataKey="year" tick={{ fontSize: 11 }} />
               <YAxis tickFormatter={(v) => usdCompact(v)} tick={{ fontSize: 11 }} width={55} />
               <Tooltip formatter={(v: number) => usd(v)} />
-              <Bar dataKey="Rent" fill="#7c3aed" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="Rent" fill="#44546A" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

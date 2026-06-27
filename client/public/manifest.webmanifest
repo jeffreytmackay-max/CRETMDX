@@ -1,12 +1,12 @@
 {
-  "name": "CRETMDX — CRE Portfolio",
-  "short_name": "CRETMDX",
-  "description": "Corporate Real Estate Portfolio Management — leases, transactions, financial modeling, and a location map.",
+  "name": "TransMedics — Real Estate Portfolio",
+  "short_name": "TransMedics RE",
+  "description": "TransMedics Real Estate Portfolio — leases, transactions, financial modeling, and a location map.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f8fafc",
-  "theme_color": "#2563eb",
+  "background_color": "#f8f6f5",
+  "theme_color": "#9D2235",
   "orientation": "any",
   "icons": [
     { "src": "./icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },

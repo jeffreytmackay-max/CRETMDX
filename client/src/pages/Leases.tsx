@@ -715,8 +715,8 @@ function LeaseDetail({
             <XAxis dataKey="year" tick={{ fontSize: 10 }} />
             <YAxis tickFormatter={(v) => usdCompact(v)} tick={{ fontSize: 10 }} width={50} />
             <Tooltip formatter={(v: number) => usd(v)} />
-            <Area type="monotone" dataKey="Base Rent" stackId="1" stroke="#2563eb" fill="#bfdbfe" />
-            <Area type="monotone" dataKey="OpEx" stackId="1" stroke="#7c3aed" fill="#ddd6fe" />
+            <Area type="monotone" dataKey="Base Rent" stackId="1" stroke="#9D2235" fill="#efc9cf" />
+            <Area type="monotone" dataKey="OpEx" stackId="1" stroke="#FF7F41" fill="#ffe3d2" />
           </AreaChart>
         </ResponsiveContainer>
       </div>

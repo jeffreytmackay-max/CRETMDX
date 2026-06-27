@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white shadow-sm ${className}`}>
+    <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>
       {children}
     </div>
   );
@@ -21,11 +21,11 @@ export function StatCard({
 }) {
   const accents: Record<string, string> = {
     slate: 'text-slate-900',
-    blue: 'text-blue-600',
-    emerald: 'text-emerald-600',
-    amber: 'text-amber-600',
-    rose: 'text-rose-600',
-    violet: 'text-violet-600',
+    blue: 'text-blue-600', // crimson
+    emerald: 'text-emerald-600', // success
+    amber: 'text-[#b45309]', // warm amber
+    rose: 'text-[#c45957]', // brand rose
+    violet: 'text-[#c2410c]', // coral
   };
   return (
     <Card className="p-5">
@@ -40,12 +40,12 @@ const BADGE_COLORS: Record<string, string> = {
   Active: 'bg-emerald-100 text-emerald-700',
   'Under Review': 'bg-amber-100 text-amber-700',
   Office: 'bg-blue-100 text-blue-700',
-  Retail: 'bg-violet-100 text-violet-700',
-  Industrial: 'bg-orange-100 text-orange-700',
+  Retail: 'bg-[#ffe3d2] text-[#c2410c]',
+  Industrial: 'bg-[#e6e9ee] text-[#44546a]',
   Warehouse: 'bg-amber-100 text-amber-700',
-  Land: 'bg-lime-100 text-lime-700',
+  Land: 'bg-emerald-100 text-emerald-700',
   Direct: 'bg-slate-100 text-slate-700',
-  Sublease: 'bg-fuchsia-100 text-fuchsia-700',
+  Sublease: 'bg-[#f6e1e4] text-[#9d2235]',
 };
 
 export function Badge({ children }: { children: string }) {
@@ -78,15 +78,15 @@ export function Button({
   type?: 'button' | 'submit';
 }) {
   const styles: Record<string, string> = {
-    primary: 'bg-blue-600 text-white hover:bg-blue-700',
+    primary: 'bg-blue-600 text-white hover:bg-blue-800',
     ghost: 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50',
-    danger: 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100',
+    danger: 'bg-[#fbf2f3] text-[#9d2235] border border-[#ecc2c8] hover:bg-[#f6e1e4]',
   };
   return (
     <button
       type={type}
       onClick={onClick}
-      className={`rounded-lg px-3.5 py-2 text-sm font-medium transition ${styles[variant]}`}
+      className={`rounded-full px-4 py-2 text-sm font-medium transition ${styles[variant]}`}
     >
       {children}
     </button>
@@ -144,7 +144,7 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className="my-auto w-full max-w-lg rounded-xl bg-white shadow-xl"
+        className="my-auto w-full max-w-lg rounded-2xl bg-white shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">

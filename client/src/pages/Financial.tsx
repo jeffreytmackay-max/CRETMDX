@@ -200,8 +200,8 @@ export default function Financial() {
                     <YAxis tickFormatter={(v) => usdCompact(v)} tick={{ fontSize: 11 }} width={55} />
                     <Tooltip formatter={(v: number) => usd(v)} />
                     <Legend />
-                    <Line type="monotone" dataKey="Lease" stroke="#2563eb" strokeWidth={2} dot={false} />
-                    <Line type="monotone" dataKey="Buy" stroke="#059669" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="Lease" stroke="#9D2235" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="Buy" stroke="#2E7D52" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -224,8 +224,8 @@ export default function Financial() {
                     <YAxis tickFormatter={(v) => usdCompact(v)} tick={{ fontSize: 11 }} width={55} />
                     <Tooltip formatter={(v: number) => usd(v)} />
                     <Legend />
-                    <Bar dataKey="Lease" fill="#2563eb" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="Buy" fill="#059669" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="Lease" fill="#9D2235" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="Buy" fill="#2E7D52" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

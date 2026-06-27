@@ -7,13 +7,7 @@ import type { Property } from '../lib/types';
 import { num } from '../lib/format';
 import { Card, Spinner } from '../components/ui';
 
-const TYPE_COLOR: Record<string, string> = {
-  Office: '#2563eb',
-  Retail: '#7c3aed',
-  Industrial: '#ea580c',
-  Warehouse: '#d97706',
-  Land: '#65a30d',
-};
+import { PROPERTY_TYPE_COLOR as TYPE_COLOR } from '../lib/brand';
 
 function markerIcon(color: string) {
   return L.divIcon({
@@ -84,7 +78,7 @@ export default function MapView() {
             <Marker
               key={p.id}
               position={[p.lat, p.lng]}
-              icon={markerIcon(TYPE_COLOR[p.property_type] || '#64748b')}
+              icon={markerIcon(TYPE_COLOR[p.property_type] || '#75787B')}
             >
               <Popup>
                 <div className="min-w-[180px]">

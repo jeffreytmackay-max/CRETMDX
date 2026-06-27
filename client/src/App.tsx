@@ -9,6 +9,7 @@ import Financial from './pages/Financial';
 import Compare from './pages/Compare';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import { Brand } from './components/Logo';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '▦', end: true },
@@ -44,15 +45,6 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
         </NavLink>
       ))}
     </nav>
-  );
-}
-
-function Brand() {
-  return (
-    <div>
-      <div className="text-lg font-bold tracking-tight text-slate-900">CRETMDX</div>
-      <div className="text-xs text-slate-500">CRE Portfolio Management</div>
-    </div>
   );
 }
 

@@ -1,6 +1,45 @@
 @import 'tailwindcss';
 @import 'leaflet/dist/leaflet.css';
 
+/* ── TransMedics brand theme ───────────────────────────────────────────────
+   Remap the design tokens the app already uses so the whole UI adopts the
+   brand system: blue → crimson, slate → warm neutral / charcoal,
+   emerald → brand success. (TMDX Brand & Collateral System v1.0) */
+@theme {
+  --font-sans: 'Mulish', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    Helvetica, Arial, sans-serif;
+
+  /* Primary — crimson, deepening to wine */
+  --color-blue-50: #fbf2f3;
+  --color-blue-100: #f6e1e4;
+  --color-blue-200: #ecc2c8;
+  --color-blue-300: #de9aa3;
+  --color-blue-400: #c45957; /* brand rose */
+  --color-blue-500: #b23a4b;
+  --color-blue-600: #9d2235; /* brand crimson (primary) */
+  --color-blue-700: #82172a;
+  --color-blue-800: #740223; /* brand wine */
+  --color-blue-900: #5c0a1b;
+
+  /* Neutrals — warm-tinted, charcoal ink */
+  --color-slate-50: #f8f6f5;
+  --color-slate-100: #efecea; /* cream */
+  --color-slate-200: #dad3d1; /* warm gray */
+  --color-slate-300: #c5beba;
+  --color-slate-400: #9b9491;
+  --color-slate-500: #75787b;
+  --color-slate-600: #565558;
+  --color-slate-700: #44414f; /* slate */
+  --color-slate-800: #38353b;
+  --color-slate-900: #302f32; /* charcoal */
+
+  /* Success — brand green */
+  --color-emerald-50: #eef6f1;
+  --color-emerald-100: #d4e9de;
+  --color-emerald-600: #2e7d52;
+  --color-emerald-700: #246443;
+}
+
 :root {
   color-scheme: light;
 }
@@ -21,11 +60,23 @@ body,
 
 body {
   font-family:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background: #f8fafc;
-  color: #0f172a;
+    'Mulish', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  background: #f8f6f5; /* warm off-white */
+  color: #302f32; /* charcoal ink */
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
+}
+
+/* Soft, warm-tinted elevation — never harsh or blue (brand: Space & Elevation) */
+.shadow-sm {
+  box-shadow: 0 1px 2px 0 rgba(48, 47, 50, 0.06), 0 1px 3px 0 rgba(48, 47, 50, 0.05) !important;
+}
+.shadow-md {
+  box-shadow: 0 4px 12px -2px rgba(48, 47, 50, 0.1), 0 2px 6px -2px rgba(48, 47, 50, 0.06) !important;
+}
+.shadow-xl {
+  box-shadow: 0 24px 48px -12px rgba(48, 47, 50, 0.18) !important;
 }
 
 /* Leaflet map needs an explicit height from its container */

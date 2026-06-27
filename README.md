@@ -15,6 +15,16 @@ core workflows plus an interactive location map:
 | **Transaction Management** | Drag-and-drop deal pipeline (kanban) across stages with weighted/gross value rollups. |
 | **Financial Modeling** | Lease-vs-buy NPV comparison with cash-flow projections, recommendation, and year-by-year detail. |
 
+## Branding
+
+The UI follows the **TransMedics Brand & Collateral System** — crimson (`#9D2235`)
+primary deepening to wine, warm coral/peach accents, charcoal ink on warm-neutral
+surfaces, soft warm-tinted elevation, pill-rounded controls / 16px cards, the
+**Mulish** typeface (Avenir Next substitute), and the interlocking-"m" monogram.
+Brand tokens are centralized: the Tailwind color scales are remapped in
+`client/src/index.css` (`@theme`) and chart/marker colors live in
+`client/src/lib/brand.ts`, with the logo in `client/src/components/Logo.tsx`.
+
 ## Tech stack
 
 - **Backend** — Node.js (Express) + the built-in `node:sqlite` database (zero native

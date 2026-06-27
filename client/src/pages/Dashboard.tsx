@@ -16,7 +16,9 @@ import type { DashboardData } from '../lib/types';
 import { usd, usdCompact, num, fmtDate, daysUntil } from '../lib/format';
 import { Card, StatCard, SectionTitle, Spinner } from '../components/ui';
 
-const TYPE_COLORS = ['#2563eb', '#7c3aed', '#ea580c', '#d97706', '#65a30d', '#0891b2'];
+import { CHART_SERIES } from '../lib/brand';
+
+const TYPE_COLORS = CHART_SERIES;
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -148,7 +150,7 @@ export default function Dashboard() {
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip formatter={(v) => [`${v} days`, 'Until event']} />
-                <Bar dataKey="days" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="days" fill="#9D2235" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
