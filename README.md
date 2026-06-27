@@ -8,7 +8,8 @@ core workflows plus an interactive location map:
 | **Dashboard** | Portfolio KPIs, upcoming critical dates, portfolio mix, pipeline value. |
 | **Map** | Leaflet / OpenStreetMap view of every site, color-coded by property type, with detail popups. |
 | **Properties** | CRUD for buildings — location, type, rentable area, market, coordinates. |
-| **Lease Administration** | Lease abstracts, critical-date tracking (expiration + notice dates), auto-generated rent schedules (escalations, free rent, OpEx, TI), and **AI PDF abstraction** — upload a lease PDF and Claude extracts the key terms and translates foreign-language clauses into English. |
+| **Lease Administration** | Lease abstracts, critical-date tracking (expiration + notice dates), auto-generated rent schedules (escalations, free rent, OpEx, TI), and **AI PDF abstraction** — upload one or many lease PDFs and Claude extracts the key terms and translates foreign-language clauses into English. Original PDFs are attached to each lease record. |
+| **Compare Leases** | Side-by-side comparison of up to four leases, with the most favorable value highlighted per row (incl. computed rent/SF, effective rent/SF, and total base rent over term). |
 | **Settings** | Store your Anthropic API key (browser-only) for the PDF abstraction feature, and reset to the sample portfolio. |
 | **Transaction Management** | Drag-and-drop deal pipeline (kanban) across stages with weighted/gross value rollups. |
 | **Financial Modeling** | Lease-vs-buy NPV comparison with cash-flow projections, recommendation, and year-by-year detail. |
@@ -117,6 +118,11 @@ document and Claude (`claude-opus-4-8`) reads it — including scanned pages and
 non-English leases — and returns a structured abstract (rent, dates, escalations,
 options, etc.) plus an English summary and a translation of the key clauses. The
 extracted values pre-fill the lease form for you to review and save.
+
+You can upload **multiple PDFs at once** — each is abstracted in turn and you
+review/assign them in a batch screen before saving. The **original PDF is stored
+with the lease** (in IndexedDB, so it doesn't hit the localStorage quota) and can
+be reopened from the lease list or detail view via the 📄 button.
 
 This runs entirely in the browser using **your own Anthropic API key**, entered
 under **Settings**. The key is stored only in your browser's local storage and is

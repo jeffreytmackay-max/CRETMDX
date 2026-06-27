@@ -6,6 +6,7 @@ import MapView from './pages/MapView';
 import Leases from './pages/Leases';
 import Transactions from './pages/Transactions';
 import Financial from './pages/Financial';
+import Compare from './pages/Compare';
 import Settings from './pages/Settings';
 
 const NAV = [
@@ -13,6 +14,7 @@ const NAV = [
   { to: '/map', label: 'Map', icon: '◎' },
   { to: '/properties', label: 'Properties', icon: '⌂' },
   { to: '/leases', label: 'Lease Administration', icon: '▤' },
+  { to: '/compare', label: 'Compare Leases', icon: '⊞' },
   { to: '/transactions', label: 'Transactions', icon: '⇄' },
   { to: '/financial', label: 'Financial Modeling', icon: '∑' },
   { to: '/settings', label: 'Settings', icon: '⚙' },
@@ -111,6 +113,7 @@ export default function App() {
           <Route path="/leases" element={<Leases />} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/financial" element={<Financial />} />
+          <Route path="/compare" element={<Compare />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>

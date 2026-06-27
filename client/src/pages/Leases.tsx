@@ -13,6 +13,7 @@ import { api } from '../lib/api';
 import type { Lease, Property, ScheduleRow } from '../lib/types';
 import { usd, usdCompact, num, fmtDate, monthsUntil } from '../lib/format';
 import { abstractLeasePdf, abstractToLease, hasApiKey } from '../lib/ai';
+import { savePdf, deletePdf, listPdfIds, openPdf } from '../lib/pdfStore';
 import {
   Badge,
   Button,
@@ -34,12 +35,16 @@ export default function Leases() {
   const [filter, setFilter] = useState<Filter>('all');
   const [detailId, setDetailId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Partial<Lease> | null>(null);
+  const [editingFile, setEditingFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [batch, setBatch] = useState<{ lease: Partial<Lease>; file: File }[] | null>(null);
+  const [pdfIds, setPdfIds] = useState<Set<number>>(new Set());
 
   const load = async () => {
-    const [l, p] = await Promise.all([api.leases(), api.properties()]);
+    const [l, p, ids] = await Promise.all([api.leases(), api.properties(), listPdfIds()]);
     setLeases(l);
     setProperties(p);
+    setPdfIds(new Set(ids));
     setLoading(false);
   };
 
@@ -57,15 +62,27 @@ export default function Leases() {
     return leases;
   }, [leases, filter]);
 
-  async function save(form: Partial<Lease>) {
-    if (form.id) await api.updateLease(form.id, form);
-    else await api.createLease(form);
+  async function save(form: Partial<Lease>, file?: File | null) {
+    let id = form.id;
+    if (id) await api.updateLease(id, form);
+    else id = (await api.createLease(form)).id;
+    if (file && id) await savePdf(id, file);
     setEditing(null);
+    setEditingFile(null);
+    load();
+  }
+  async function saveBatch(items: { lease: Partial<Lease>; file: File }[]) {
+    for (const { lease, file } of items) {
+      const created = await api.createLease(lease);
+      if (created?.id) await savePdf(created.id, file);
+    }
+    setBatch(null);
     load();
   }
   async function remove(id: number) {
     if (!confirm('Delete this lease?')) return;
     await api.deleteLease(id);
+    await deletePdf(id);
     load();
   }
 
@@ -125,12 +142,23 @@ export default function Leases() {
               return (
                 <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="px-5 py-3">
-                    <button
-                      className="font-medium text-slate-800 hover:text-blue-600 hover:underline"
-                      onClick={() => setDetailId(l.id)}
-                    >
-                      {l.lease_name}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="font-medium text-slate-800 hover:text-blue-600 hover:underline"
+                        onClick={() => setDetailId(l.id)}
+                      >
+                        {l.lease_name}
+                      </button>
+                      {pdfIds.has(l.id) && (
+                        <button
+                          title="View original PDF"
+                          onClick={() => openPdf(l.id)}
+                          className="text-xs text-rose-500 hover:text-rose-700"
+                        >
+                          📄
+                        </button>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-400">
                       {l.property_name} · {l.counterparty}
                     </div>
@@ -176,23 +204,45 @@ export default function Leases() {
       </Card>
 
       {detailId !== null && (
-        <LeaseDetail id={detailId} onClose={() => setDetailId(null)} />
+        <LeaseDetail
+          id={detailId}
+          hasPdf={pdfIds.has(detailId)}
+          onClose={() => setDetailId(null)}
+        />
       )}
       {editing && (
         <LeaseForm
           initial={editing}
+          initialFile={editingFile}
+          hasPdf={!!editing.id && pdfIds.has(editing.id)}
           properties={properties}
           onSave={save}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setEditing(null);
+            setEditingFile(null);
+          }}
         />
       )}
       {importing && (
         <ImportPdf
           onClose={() => setImporting(false)}
-          onAbstracted={(lease) => {
+          onSingle={(lease, file) => {
             setImporting(false);
+            setEditingFile(file);
             setEditing(lease);
           }}
+          onBatch={(items) => {
+            setImporting(false);
+            setBatch(items);
+          }}
+        />
+      )}
+      {batch && (
+        <BatchReview
+          items={batch}
+          properties={properties}
+          onSaveAll={saveBatch}
+          onClose={() => setBatch(null)}
         />
       )}
     </div>
@@ -201,36 +251,57 @@ export default function Leases() {
 
 function ImportPdf({
   onClose,
-  onAbstracted,
+  onSingle,
+  onBatch,
 }: {
   onClose: () => void;
-  onAbstracted: (lease: Partial<Lease>) => void;
+  onSingle: (lease: Partial<Lease>, file: File) => void;
+  onBatch: (items: { lease: Partial<Lease>; file: File }[]) => void;
 }) {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
   const [error, setError] = useState<string>('');
   const keyMissing = !hasApiKey();
 
   async function run() {
-    if (!file) return;
+    if (files.length === 0) return;
     setBusy(true);
     setError('');
+    const results: { lease: Partial<Lease>; file: File }[] = [];
+    const failures: string[] = [];
     try {
-      const result = await abstractLeasePdf(file);
-      onAbstracted(abstractToLease(result));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      for (let i = 0; i < files.length; i++) {
+        setProgress(`Reading ${i + 1} of ${files.length}: ${files[i].name}`);
+        try {
+          const abstract = await abstractLeasePdf(files[i]);
+          results.push({ lease: abstractToLease(abstract), file: files[i] });
+        } catch (e) {
+          failures.push(`${files[i].name}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+      if (results.length === 0) {
+        setError(failures.join('\n') || 'No leases could be read.');
+        return;
+      }
+      if (failures.length) setError(`Some files failed:\n${failures.join('\n')}`);
+      if (results.length === 1 && failures.length === 0) {
+        onSingle(results[0].lease, results[0].file);
+      } else {
+        onBatch(results);
+      }
     } finally {
       setBusy(false);
+      setProgress('');
     }
   }
 
   return (
-    <Modal title="Abstract a Lease from PDF" onClose={onClose}>
+    <Modal title="Abstract Leases from PDF" onClose={onClose}>
       {keyMissing ? (
         <div className="space-y-3 text-sm text-slate-600">
           <p>
-            To read PDFs, add your Anthropic API key first. Claude reads the document — including
+            To read PDFs, add your Anthropic API key first. Claude reads each document — including
             scanned and non-English leases — and fills in the lease abstract for you.
           </p>
           <Link
@@ -244,36 +315,134 @@ function ImportPdf({
       ) : (
         <div className="space-y-4">
           <p className="text-sm text-slate-600">
-            Upload a lease PDF. Claude will extract the key terms (rent, dates, options, etc.) and
-            translate any foreign-language clauses into English. You'll review everything before it's
-            saved.
+            Upload one or more lease PDFs. Claude extracts the key terms (rent, dates, options) and
+            translates any foreign-language clauses. The original PDFs are attached to each lease,
+            and you review everything before saving.
           </p>
-          <Field label="Lease PDF">
+          <Field label="Lease PDF(s)">
             <input
               type="file"
               accept="application/pdf,.pdf"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              multiple
+              onChange={(e) => setFiles(Array.from(e.target.files || []))}
               className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
             />
           </Field>
+          {files.length > 0 && (
+            <div className="text-xs text-slate-500">
+              {files.length} file{files.length > 1 ? 's' : ''} selected
+            </div>
+          )}
           {error && (
-            <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+            <div className="whitespace-pre-wrap rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              {error}
+            </div>
           )}
           <div className="flex items-center justify-end gap-2">
             <Button variant="ghost" onClick={onClose}>
               Cancel
             </Button>
             <Button onClick={run}>
-              {busy ? 'Reading lease…' : 'Abstract lease'}
+              {busy ? 'Reading…' : files.length > 1 ? `Abstract ${files.length} leases` : 'Abstract lease'}
             </Button>
           </div>
           {busy && (
             <p className="text-center text-xs text-slate-500">
-              Claude is reading the document — this can take 15–40 seconds for long leases.
+              {progress || 'Working…'} — Claude takes ~15–40 seconds per lease.
             </p>
           )}
         </div>
       )}
+    </Modal>
+  );
+}
+
+function BatchReview({
+  items,
+  properties,
+  onSaveAll,
+  onClose,
+}: {
+  items: { lease: Partial<Lease>; file: File }[];
+  properties: Property[];
+  onSaveAll: (items: { lease: Partial<Lease>; file: File }[]) => void;
+  onClose: () => void;
+}) {
+  const [rows, setRows] = useState(
+    items.map((it) => ({ ...it, include: true, propertyId: '' as number | '' })),
+  );
+  const [saving, setSaving] = useState(false);
+
+  function update(i: number, patch: Partial<(typeof rows)[number]>) {
+    setRows((r) => r.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
+  }
+
+  async function saveAll() {
+    const selected = rows
+      .filter((r) => r.include)
+      .map((r) => ({
+        lease: { ...r.lease, property_id: r.propertyId === '' ? undefined : r.propertyId },
+        file: r.file,
+      }));
+    if (selected.length === 0) return;
+    setSaving(true);
+    await onSaveAll(selected);
+  }
+
+  const count = rows.filter((r) => r.include).length;
+
+  return (
+    <Modal title={`Review ${items.length} Abstracted Leases`} onClose={onClose}>
+      <p className="mb-3 text-sm text-slate-600">
+        Claude read these leases. Assign a property and uncheck any you don't want to import. You can
+        fine-tune each one after saving.
+      </p>
+      <div className="max-h-[55vh] space-y-2 overflow-y-auto scroll-touch pr-1">
+        {rows.map((r, i) => (
+          <div key={i} className="rounded-lg border border-slate-200 p-3">
+            <div className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={r.include}
+                onChange={(e) => update(i, { include: e.target.checked })}
+                className="mt-1"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-slate-800">
+                  {r.lease.lease_name}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {r.lease.counterparty} · {usdCompact(r.lease.base_rent_annual || 0)}/yr ·{' '}
+                  {num(r.lease.rentable_sqft || 0)} sf · exp {fmtDate(r.lease.expiration_date)}
+                </div>
+                <div className="mt-2">
+                  <Select
+                    value={r.propertyId}
+                    onChange={(e) =>
+                      update(i, { propertyId: e.target.value ? Number(e.target.value) : '' })
+                    }
+                  >
+                    <option value="">— Assign property —</option>
+                    {properties.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex items-center justify-end gap-2">
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button onClick={saveAll}>
+          {saving ? 'Saving…' : `Save ${count} lease${count === 1 ? '' : 's'}`}
+        </Button>
+      </div>
     </Modal>
   );
 }
@@ -292,7 +461,15 @@ function addMonths(date: string, months: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function LeaseDetail({ id, onClose }: { id: number; onClose: () => void }) {
+function LeaseDetail({
+  id,
+  hasPdf,
+  onClose,
+}: {
+  id: number;
+  hasPdf: boolean;
+  onClose: () => void;
+}) {
   const [data, setData] = useState<{ lease: Lease; termYears: number; schedule: ScheduleRow[] } | null>(
     null,
   );
@@ -336,6 +513,14 @@ function LeaseDetail({ id, onClose }: { id: number; onClose: () => void }) {
 
   return (
     <Modal title={lease.lease_name} onClose={onClose}>
+      {hasPdf && (
+        <button
+          onClick={() => openPdf(id)}
+          className="mb-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          📄 View original PDF
+        </button>
+      )}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
         {facts.map(([k, v]) => (
           <div key={k} className="contents">
@@ -402,16 +587,21 @@ function LeaseDetail({ id, onClose }: { id: number; onClose: () => void }) {
 
 function LeaseForm({
   initial,
+  initialFile,
+  hasPdf,
   properties,
   onSave,
   onClose,
 }: {
   initial: Partial<Lease>;
+  initialFile?: File | null;
+  hasPdf?: boolean;
   properties: Property[];
-  onSave: (l: Partial<Lease>) => void;
+  onSave: (l: Partial<Lease>, file?: File | null) => void;
   onClose: () => void;
 }) {
   const [form, setForm] = useState<Partial<Lease>>(initial);
+  const [file, setFile] = useState<File | null>(initialFile || null);
   const set = (k: keyof Lease, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const numSet = (k: keyof Lease) => (e: React.ChangeEvent<HTMLInputElement>) =>
     set(k, parseFloat(e.target.value || '0'));
@@ -422,7 +612,7 @@ function LeaseForm({
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          onSave(form);
+          onSave(form, file);
         }}
       >
         <Field label="Lease Name">
@@ -502,6 +692,21 @@ function LeaseForm({
             onChange={(e) => set('notes', e.target.value)}
             placeholder="Summary, translated clauses, or any notes…"
           />
+        </Field>
+        <Field label="Original PDF (optional)">
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+          />
+          <div className="mt-1 text-xs text-slate-500">
+            {file
+              ? `Attached: ${file.name}`
+              : hasPdf
+                ? 'A PDF is already attached. Choose a file to replace it.'
+                : 'Attach the source lease document to keep it with this record.'}
+          </div>
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>
