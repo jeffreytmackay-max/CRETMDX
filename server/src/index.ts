@@ -18,7 +18,10 @@ const LEASE_COLS = [
   'property_id', 'lease_name', 'counterparty', 'lease_type', 'role',
   'commencement_date', 'expiration_date', 'rentable_sqft', 'base_rent_annual',
   'escalation_pct', 'opex_psf', 'free_rent_months', 'ti_allowance_psf',
-  'security_deposit', 'renewal_options', 'notice_period_months', 'status', 'notes',
+  'security_deposit', 'renewal_options', 'notice_period_months', 'status',
+  'execution_date', 'rent_start_date', 'duration_months', 'usable_sqft',
+  'loss_factor', 'building_type', 'property_use', 'lead_broker', 'rent_calc_type',
+  'currency', 'parking_spaces', 'parking_rate_monthly', 'notes',
 ];
 const TRANSACTION_COLS = [
   'name', 'property_id', 'type', 'stage', 'market', 'target_sqft',

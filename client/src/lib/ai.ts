@@ -43,6 +43,19 @@ export interface LeaseAbstract {
   security_deposit: number;
   renewal_options: string;
   notice_period_months: number;
+  // CBRE-style abstract fields
+  execution_date: string;
+  rent_start_date: string;
+  duration_months: number;
+  usable_sqft: number;
+  loss_factor: number;
+  building_type: string;
+  property_use: string;
+  lead_broker: string;
+  rent_calc_type: string;
+  currency: string;
+  parking_spaces: number;
+  parking_rate_monthly: number;
   detected_language: string;
   english_summary: string;
   translated_clauses: string;
@@ -70,10 +83,22 @@ Return ONLY a single JSON object (no markdown, no prose, no code fences) with EX
 - "free_rent_months": free/abated rent as a NUMBER of months. 0 if none.
 - "ti_allowance_psf": tenant improvement allowance as a NUMBER per square foot. 0 if none.
 - "security_deposit": security deposit as a NUMBER. 0 if none.
-- "renewal_options": renewal/extension options described in plain English (e.g. "One 5-year option at FMV"). "None" if none.
+- "renewal_options": renewal/extension options described in plain English (e.g. "Two 10-year options at 95% FMV"). "None" if none.
 - "notice_period_months": required notice period before expiration as a NUMBER of months. 0 if unknown.
+- "execution_date": the lease execution/signing date as "YYYY-MM-DD" (empty if not found).
+- "rent_start_date": the rent commencement date (when base rent first becomes payable) as "YYYY-MM-DD" (empty if not found; may differ from commencement when there is a rent-free build-out period).
+- "duration_months": the total lease term in NUMBER of months. 0 if unknown.
+- "usable_sqft": usable area as a NUMBER in square feet. 0 if unknown.
+- "loss_factor": the loss/load factor as a NUMBER percent (rentable vs usable). 0 if unknown.
+- "building_type": building/space type (e.g. "Office", "Lab", "Office/Lab", "Industrial", "Retail"). "" if unknown.
+- "property_use": permitted use of the premises in a few words. "" if unknown.
+- "lead_broker": the lead broker or agent named, if any. "" if none.
+- "rent_calc_type": rent structure — one of "Net" (triple net / NNN), "Gross", or "Modified Gross". "" if unclear.
+- "currency": ISO currency code of the rent (e.g. "USD", "EUR"). Default "USD".
+- "parking_spaces": number of parking spaces included. 0 if none.
+- "parking_rate_monthly": monthly charge per parking space as a NUMBER. 0 if none.
 - "detected_language": the primary language of the document (e.g. "English", "Spanish", "Japanese").
-- "english_summary": a concise English summary (3-6 sentences) of the lease and its most important obligations and dates.
+- "english_summary": a thorough English summary that captures the most important OPTIONS & CRITICAL EVENTS (renewal/extension options, purchase options, rights of first offer/refusal, TI deadlines, surrender obligations), KEY CLAUSES (operating expenses, security deposit / letter of credit, TI allowance, rent offsets), and any ABSTRACTOR NOTES or open items. Use short labeled lines or bullets.
 - "translated_clauses": if the document is NOT in English, an English translation of the most important clauses (rent, term, renewal, termination); otherwise an empty string.
 
 Use numbers (not strings) for all numeric fields. Use "" for unknown text fields and 0 for unknown numbers.
@@ -165,6 +190,18 @@ export function abstractToLease(a: LeaseAbstract): Partial<Lease> {
     security_deposit: a.security_deposit || 0,
     renewal_options: a.renewal_options || 'None',
     notice_period_months: a.notice_period_months || 0,
+    execution_date: a.execution_date || '',
+    rent_start_date: a.rent_start_date || '',
+    duration_months: a.duration_months || 0,
+    usable_sqft: a.usable_sqft || 0,
+    loss_factor: a.loss_factor || 0,
+    building_type: a.building_type || '',
+    property_use: a.property_use || '',
+    lead_broker: a.lead_broker || '',
+    rent_calc_type: a.rent_calc_type || '',
+    currency: a.currency || 'USD',
+    parking_spaces: a.parking_spaces || 0,
+    parking_rate_monthly: a.parking_rate_monthly || 0,
     status: 'Active',
     notes: notesParts.join('\n'),
   };

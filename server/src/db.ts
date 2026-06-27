@@ -52,6 +52,18 @@ export function initSchema(): void {
       renewal_options TEXT,
       notice_period_months INTEGER DEFAULT 6,
       status TEXT DEFAULT 'Active',
+      execution_date TEXT,
+      rent_start_date TEXT,
+      duration_months INTEGER DEFAULT 0,
+      usable_sqft INTEGER DEFAULT 0,
+      loss_factor REAL DEFAULT 0,
+      building_type TEXT,
+      property_use TEXT,
+      lead_broker TEXT,
+      rent_calc_type TEXT,
+      currency TEXT DEFAULT 'USD',
+      parking_spaces INTEGER DEFAULT 0,
+      parking_rate_monthly REAL DEFAULT 0,
       notes TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );

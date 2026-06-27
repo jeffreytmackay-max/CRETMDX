@@ -35,6 +35,19 @@ export interface Lease {
   notice_period_months: number;
   status: string;
   notes?: string;
+  // CBRE-style abstract fields
+  execution_date?: string;
+  rent_start_date?: string;
+  duration_months?: number;
+  usable_sqft?: number;
+  loss_factor?: number;
+  building_type?: string;
+  property_use?: string;
+  lead_broker?: string;
+  rent_calc_type?: string;
+  currency?: string;
+  parking_spaces?: number;
+  parking_rate_monthly?: number;
   property_name?: string;
   property_city?: string;
   property_state?: string;

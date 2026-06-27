@@ -30,7 +30,14 @@ export const api = {
   leases: () => ok<Lease[]>(store.listLeasesEnriched()),
   lease: (id: number) => ok(store.getLease(id) as Lease),
   leaseSchedule: (id: number) => {
-    const lease = store.getLease(id) as Lease;
+    const raw = store.getLease(id) as Lease;
+    const prop = store.listProperties().find((p) => p.id === raw.property_id);
+    const lease: Lease = {
+      ...raw,
+      property_name: prop?.name,
+      property_city: prop?.city,
+      property_state: prop?.state,
+    };
     const termYears = leaseTermYears(lease.commencement_date, lease.expiration_date);
     const schedule: ScheduleRow[] = buildLeaseCashflows({
       rentableSqft: lease.rentable_sqft || 0,

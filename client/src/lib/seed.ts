@@ -16,6 +16,7 @@ export const SEED_PROPERTIES: Property[] = [
   { id: 10, name: 'Magnificent Mile Retail', address: '663 N Michigan Ave', city: 'Chicago', state: 'IL', zip: '60611', country: 'USA', lat: 41.8939, lng: -87.6244, property_type: 'Retail', rentable_sqft: 18000, status: 'Active', market: 'Chicago' },
   { id: 11, name: 'Miami Brickell Center', address: '701 Brickell Ave', city: 'Miami', state: 'FL', zip: '33131', country: 'USA', lat: 25.7634, lng: -80.1911, property_type: 'Office', rentable_sqft: 76000, status: 'Active', market: 'South Florida' },
   { id: 12, name: 'Seattle South Lake Union', address: '400 Fairview Ave N', city: 'Seattle', state: 'WA', zip: '98109', country: 'USA', lat: 47.6256, lng: -122.3344, property_type: 'Office', rentable_sqft: 132000, status: 'Active', market: 'Seattle' },
+  { id: 13, name: 'TransMedics — Somerville', address: '188 Assembly Park Drive', city: 'Somerville', state: 'MA', zip: '02145', country: 'USA', lat: 42.3925, lng: -71.0779, property_type: 'Office', rentable_sqft: 498286, status: 'Active', market: 'Boston' },
 ];
 
 const L = (o: Partial<Lease>): Lease =>
@@ -38,6 +39,39 @@ export const SEED_LEASES: Lease[] = [
   L({ id: 9, property_id: 10, lease_name: 'Magnificent Mile Retail — Flagship', counterparty: 'Acadia Realty', commencement_date: '2018-05-01', expiration_date: '2026-12-31', rentable_sqft: 18000, base_rent_annual: 3600000, escalation_pct: 4, opex_psf: 35, free_rent_months: 0, ti_allowance_psf: 150, security_deposit: 600000, renewal_options: 'One 5-year option at 110% FMV', notice_period_months: 12 }),
   L({ id: 10, property_id: 11, lease_name: 'Miami Brickell Center — Floor 18', counterparty: 'Rilea Group', commencement_date: '2023-09-01', expiration_date: '2028-08-31', rentable_sqft: 76000, base_rent_annual: 4180000, escalation_pct: 3.25, opex_psf: 20, free_rent_months: 4, ti_allowance_psf: 70, security_deposit: 700000, renewal_options: 'One 5-year option' }),
   L({ id: 11, property_id: 12, lease_name: 'Seattle SLU — Floors 3-8', counterparty: 'Vulcan Real Estate', commencement_date: '2020-10-01', expiration_date: '2027-09-30', rentable_sqft: 132000, base_rent_annual: 7260000, escalation_pct: 3, opex_psf: 21, free_rent_months: 8, ti_allowance_psf: 95, security_deposit: 1210000, renewal_options: 'One 5-year option', notice_period_months: 12 }),
+  L({
+    id: 12,
+    property_id: 13,
+    lease_name: 'TransMedics — 188 Assembly Park Dr',
+    counterparty: 'BRE-BMR 26 Assembly Innovation I LLC',
+    lease_type: 'Direct',
+    commencement_date: '2026-01-05',
+    expiration_date: '2044-01-31',
+    rentable_sqft: 498286,
+    base_rent_annual: 1993144,
+    escalation_pct: 3,
+    opex_psf: 0,
+    free_rent_months: 24,
+    ti_allowance_psf: 0,
+    security_deposit: 17938296,
+    renewal_options: 'Two 10-year options at 95% FMV (18-mo notice); plus a one-time 6-month short-term option at 100% of then-current rent',
+    notice_period_months: 18,
+    execution_date: '2026-01-05',
+    rent_start_date: '2028-01-01',
+    duration_months: 216,
+    building_type: 'Office/Lab',
+    property_use: 'Office and laboratory',
+    lead_broker: 'John Wilson',
+    rent_calc_type: 'Net',
+    currency: 'USD',
+    parking_spaces: 558,
+    parking_rate_monthly: 250,
+    notes:
+      'Source: CBRE Lease Abstract (TransMedics-MA-Somerville, 2/13/2026).\n\n' +
+      'Options & critical events: Fixed purchase option ($362,389,818, exercisable until ~60 days before the 3rd anniversary of the TCD) plus parking purchase ($12,200,000); Right of First Offer to purchase after year 3; two 10-year renewal options at 95% FMV; 6-month short-term extension option; multiple TI design/budget/schedule deadlines and TI Letter-of-Credit step-ups.\n\n' +
+      'Clauses: Triple-net — tenant pays its Adjusted Share of Operating Expenses plus a Property Management Fee (monthly OpEx TBD). Security: $17,938,296 letter of credit, reducible after year 4 if market cap > $3B and unrestricted cash > $200M. TI allowance: lease is silent. Parking: 558 Phase-I spaces at $250/space/mo (≤3% annual increases), payable from the Rent Commencement Date regardless of use.\n\n' +
+      'Abstractor notes: All dates estimated from an assumed Term Commencement Date of 1/5/2026 and need confirmation; base rent first payable on the Rent Commencement Date (later of 1/1/2028 or 24 months after TCD).',
+  }),
 ];
 
 export const SEED_TRANSACTIONS: Transaction[] = [

@@ -487,21 +487,37 @@ function esc(s: unknown): string {
 
 // Opens a print-friendly one-page lease abstract in a new window (Save as PDF).
 function printAbstract(lease: Lease, termYears: number, schedule: ScheduleRow[]) {
+  const cur = lease.currency || 'USD';
+  const m = (n: number, d = 0) =>
+    cur === 'USD'
+      ? usd(n, d)
+      : `${new Intl.NumberFormat('en-US', { maximumFractionDigits: d, minimumFractionDigits: d }).format(n || 0)} ${cur}`;
   const facts: [string, string][] = [
     ['Property', lease.property_name || '—'],
-    ['Counterparty', lease.counterparty || '—'],
+    ['Landlord / Counterparty', lease.counterparty || '—'],
     ['Role / Type', `${lease.role} · ${lease.lease_type}`],
+    ['Status', lease.status],
+    ['Building Type', lease.building_type || '—'],
+    ['Property Use', lease.property_use || '—'],
+    ['Lead Broker', lease.lead_broker || '—'],
+    ['Execution', fmtDate(lease.execution_date)],
     ['Commencement', fmtDate(lease.commencement_date)],
+    ['Rent Start', fmtDate(lease.rent_start_date)],
     ['Expiration', fmtDate(lease.expiration_date)],
-    ['Term', `${termYears} years`],
-    ['Rentable SF', num(lease.rentable_sqft)],
-    ['Base Rent (Yr 1)', usd(lease.base_rent_annual)],
-    ['Escalation', `${lease.escalation_pct}% / yr`],
-    ['OpEx', `${usd(lease.opex_psf, 2)} / sf`],
-    ['Free Rent', `${lease.free_rent_months} months`],
-    ['TI Allowance', `${usd(lease.ti_allowance_psf, 2)} / sf`],
-    ['Security Deposit', usd(lease.security_deposit)],
+    ['Duration', lease.duration_months ? `${lease.duration_months} months` : `${termYears} years`],
     ['Notice Period', `${lease.notice_period_months} months`],
+    ['Rentable SF', num(lease.rentable_sqft)],
+    ['Usable SF', lease.usable_sqft ? num(lease.usable_sqft) : '—'],
+    ['Loss Factor', lease.loss_factor ? `${lease.loss_factor}%` : '—'],
+    ['Rent Calc Type', lease.rent_calc_type || '—'],
+    ['Currency', cur],
+    ['Base Rent (Yr 1)', m(lease.base_rent_annual)],
+    ['Escalation', `${lease.escalation_pct}% / yr`],
+    ['OpEx', `${m(lease.opex_psf, 2)} / sf`],
+    ['Free Rent', `${lease.free_rent_months} months`],
+    ['TI Allowance', `${m(lease.ti_allowance_psf, 2)} / sf`],
+    ['Security Deposit', m(lease.security_deposit)],
+    ['Parking', lease.parking_spaces ? `${num(lease.parking_spaces)} spaces @ ${m(lease.parking_rate_monthly || 0)}/mo` : '—'],
     ['Renewal Options', lease.renewal_options || 'None'],
   ];
   const generated = new Date().toLocaleDateString('en-US', {
@@ -579,23 +595,70 @@ function LeaseDetail({
     OpEx: Math.round(r.opex),
   }));
 
-  const facts: [string, string][] = [
-    ['Property', lease.property_name || '—'],
-    ['Counterparty', lease.counterparty],
-    ['Role / Type', `${lease.role} · ${lease.lease_type}`],
-    ['Commencement', fmtDate(lease.commencement_date)],
-    ['Expiration', fmtDate(lease.expiration_date)],
-    ['Term', `${termYears} years`],
-    ['Rentable SF', num(lease.rentable_sqft)],
-    ['Base Rent (Yr 1)', usd(lease.base_rent_annual)],
-    ['Escalation', `${lease.escalation_pct}% / yr`],
-    ['OpEx', `${usd(lease.opex_psf, 2)} / sf`],
-    ['Free Rent', `${lease.free_rent_months} months`],
-    ['TI Allowance', `${usd(lease.ti_allowance_psf, 2)} / sf`],
-    ['Security Deposit', usd(lease.security_deposit)],
-    ['Notice Period', `${lease.notice_period_months} months`],
-    ['Renewal Options', lease.renewal_options || 'None'],
+  const cur = lease.currency || 'USD';
+  const money = (n: number, digits = 0) =>
+    cur === 'USD'
+      ? usd(n, digits)
+      : `${new Intl.NumberFormat('en-US', { maximumFractionDigits: digits, minimumFractionDigits: digits }).format(n || 0)} ${cur}`;
+  const sections: { title: string; rows: [string, string][] }[] = [
+    {
+      title: 'General',
+      rows: [
+        ['Property', lease.property_name || '—'],
+        ['Landlord / Counterparty', lease.counterparty || '—'],
+        ['Role / Type', `${lease.role} · ${lease.lease_type}`],
+        ['Status', lease.status],
+        ['Building Type', lease.building_type || '—'],
+        ['Property Use', lease.property_use || '—'],
+        ['Lead Broker', lease.lead_broker || '—'],
+      ],
+    },
+    {
+      title: 'Dates',
+      rows: [
+        ['Execution', fmtDate(lease.execution_date)],
+        ['Commencement', fmtDate(lease.commencement_date)],
+        ['Rent Start', fmtDate(lease.rent_start_date)],
+        ['Expiration', fmtDate(lease.expiration_date)],
+        ['Duration', lease.duration_months ? `${lease.duration_months} months` : `${termYears} years`],
+        ['Notice Period', `${lease.notice_period_months} months`],
+      ],
+    },
+    {
+      title: 'Area',
+      rows: [
+        ['Rentable SF', num(lease.rentable_sqft)],
+        ['Usable SF', lease.usable_sqft ? num(lease.usable_sqft) : '—'],
+        ['Loss Factor', lease.loss_factor ? `${lease.loss_factor}%` : '—'],
+      ],
+    },
+    {
+      title: 'Financial',
+      rows: [
+        ['Rent Calc Type', lease.rent_calc_type || '—'],
+        ['Currency', cur],
+        ['Base Rent (Yr 1)', money(lease.base_rent_annual)],
+        ['Escalation', `${lease.escalation_pct}% / yr`],
+        ['OpEx', `${money(lease.opex_psf, 2)} / sf`],
+        ['Free Rent', `${lease.free_rent_months} months`],
+        ['TI Allowance', `${money(lease.ti_allowance_psf, 2)} / sf`],
+        ['Security Deposit', money(lease.security_deposit)],
+      ],
+    },
   ];
+  if (lease.parking_spaces || lease.parking_rate_monthly) {
+    sections.push({
+      title: 'Parking',
+      rows: [
+        ['Spaces', num(lease.parking_spaces || 0)],
+        ['Rate', `${money(lease.parking_rate_monthly || 0)} / space / mo`],
+      ],
+    });
+  }
+  sections.push({
+    title: 'Options',
+    rows: [['Renewal Options', lease.renewal_options || 'None']],
+  });
 
   return (
     <Modal title={lease.lease_name} onClose={onClose}>
@@ -615,11 +678,20 @@ function LeaseDetail({
           </button>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-        {facts.map(([k, v]) => (
-          <div key={k} className="contents">
-            <span className="text-slate-500">{k}</span>
-            <span className="text-right font-medium text-slate-800">{v}</span>
+      <div className="space-y-3">
+        {sections.map((sec) => (
+          <div key={sec.title}>
+            <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              {sec.title}
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+              {sec.rows.map(([k, v]) => (
+                <div key={k} className="contents">
+                  <span className="text-slate-500">{k}</span>
+                  <span className="text-right font-medium text-slate-800">{v}</span>
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
@@ -779,6 +851,62 @@ function LeaseForm({
         <Field label="Renewal Options">
           <Input value={form.renewal_options || ''} onChange={(e) => set('renewal_options', e.target.value)} />
         </Field>
+
+        <div className="border-t border-slate-200 pt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Abstract Details
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Execution Date">
+            <Input type="date" value={form.execution_date || ''} onChange={(e) => set('execution_date', e.target.value)} />
+          </Field>
+          <Field label="Rent Start Date">
+            <Input type="date" value={form.rent_start_date || ''} onChange={(e) => set('rent_start_date', e.target.value)} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Duration (mo)">
+            <Input type="number" value={form.duration_months ?? 0} onChange={numSet('duration_months')} />
+          </Field>
+          <Field label="Usable SF">
+            <Input type="number" value={form.usable_sqft ?? 0} onChange={numSet('usable_sqft')} />
+          </Field>
+          <Field label="Loss Factor %">
+            <Input type="number" step="0.1" value={form.loss_factor ?? 0} onChange={numSet('loss_factor')} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Building Type">
+            <Input value={form.building_type || ''} onChange={(e) => set('building_type', e.target.value)} placeholder="Office, Lab, Industrial…" />
+          </Field>
+          <Field label="Property Use">
+            <Input value={form.property_use || ''} onChange={(e) => set('property_use', e.target.value)} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Rent Calc Type">
+            <Select value={form.rent_calc_type || ''} onChange={(e) => set('rent_calc_type', e.target.value)}>
+              <option value="">—</option>
+              <option>Net</option>
+              <option>Gross</option>
+              <option>Modified Gross</option>
+            </Select>
+          </Field>
+          <Field label="Currency">
+            <Input value={form.currency || 'USD'} onChange={(e) => set('currency', e.target.value)} />
+          </Field>
+          <Field label="Lead Broker">
+            <Input value={form.lead_broker || ''} onChange={(e) => set('lead_broker', e.target.value)} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Parking Spaces">
+            <Input type="number" value={form.parking_spaces ?? 0} onChange={numSet('parking_spaces')} />
+          </Field>
+          <Field label="Parking $/space/mo">
+            <Input type="number" value={form.parking_rate_monthly ?? 0} onChange={numSet('parking_rate_monthly')} />
+          </Field>
+        </div>
+
         <Field label="Notes / Abstract">
           <Textarea
             rows={form.notes ? 6 : 2}
