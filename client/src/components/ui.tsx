@@ -111,6 +111,15 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   );
 }
 
+export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+    />
+  );
+}
+
 export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select

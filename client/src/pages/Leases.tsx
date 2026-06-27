@@ -8,9 +8,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Lease, Property, ScheduleRow } from '../lib/types';
 import { usd, usdCompact, num, fmtDate, monthsUntil } from '../lib/format';
+import { abstractLeasePdf, abstractToLease, hasApiKey } from '../lib/ai';
 import {
   Badge,
   Button,
@@ -20,6 +22,7 @@ import {
   Modal,
   Select,
   Spinner,
+  Textarea,
 } from '../components/ui';
 
 type Filter = 'all' | 'expiring' | 'active';
@@ -31,6 +34,7 @@ export default function Leases() {
   const [filter, setFilter] = useState<Filter>('all');
   const [detailId, setDetailId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Partial<Lease> | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const load = async () => {
     const [l, p] = await Promise.all([api.leases(), api.properties()]);
@@ -76,9 +80,14 @@ export default function Leases() {
             Lease abstracts, critical dates, and rent schedules
           </p>
         </div>
-        <Button onClick={() => setEditing({ status: 'Active', escalation_pct: 3, notice_period_months: 9 })}>
-          + Add Lease
-        </Button>
+        <div className="flex flex-shrink-0 gap-2">
+          <Button variant="ghost" onClick={() => setImporting(true)}>
+            ⤓ Abstract PDF
+          </Button>
+          <Button onClick={() => setEditing({ status: 'Active', escalation_pct: 3, notice_period_months: 9 })}>
+            + Add Lease
+          </Button>
+        </div>
       </div>
 
       <div className="mb-4 flex gap-2">
@@ -177,7 +186,95 @@ export default function Leases() {
           onClose={() => setEditing(null)}
         />
       )}
+      {importing && (
+        <ImportPdf
+          onClose={() => setImporting(false)}
+          onAbstracted={(lease) => {
+            setImporting(false);
+            setEditing(lease);
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function ImportPdf({
+  onClose,
+  onAbstracted,
+}: {
+  onClose: () => void;
+  onAbstracted: (lease: Partial<Lease>) => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>('');
+  const keyMissing = !hasApiKey();
+
+  async function run() {
+    if (!file) return;
+    setBusy(true);
+    setError('');
+    try {
+      const result = await abstractLeasePdf(file);
+      onAbstracted(abstractToLease(result));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Abstract a Lease from PDF" onClose={onClose}>
+      {keyMissing ? (
+        <div className="space-y-3 text-sm text-slate-600">
+          <p>
+            To read PDFs, add your Anthropic API key first. Claude reads the document — including
+            scanned and non-English leases — and fills in the lease abstract for you.
+          </p>
+          <Link
+            to="/settings"
+            onClick={onClose}
+            className="inline-block rounded-lg bg-blue-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            Go to Settings →
+          </Link>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Upload a lease PDF. Claude will extract the key terms (rent, dates, options, etc.) and
+            translate any foreign-language clauses into English. You'll review everything before it's
+            saved.
+          </p>
+          <Field label="Lease PDF">
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+            />
+          </Field>
+          {error && (
+            <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button onClick={run}>
+              {busy ? 'Reading lease…' : 'Abstract lease'}
+            </Button>
+          </div>
+          {busy && (
+            <p className="text-center text-xs text-slate-500">
+              Claude is reading the document — this can take 15–40 seconds for long leases.
+            </p>
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }
 
@@ -247,6 +344,15 @@ function LeaseDetail({ id, onClose }: { id: number; onClose: () => void }) {
           </div>
         ))}
       </div>
+
+      {lease.notes && (
+        <div className="mt-4 rounded-lg bg-slate-50 p-3">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Notes & Abstract
+          </div>
+          <p className="whitespace-pre-wrap text-sm text-slate-700">{lease.notes}</p>
+        </div>
+      )}
 
       <div className="mt-5 mb-1 text-sm font-semibold text-slate-700">
         Rent Schedule · {usd(totalRent)} total base rent
@@ -388,6 +494,14 @@ function LeaseForm({
         </div>
         <Field label="Renewal Options">
           <Input value={form.renewal_options || ''} onChange={(e) => set('renewal_options', e.target.value)} />
+        </Field>
+        <Field label="Notes / Abstract">
+          <Textarea
+            rows={form.notes ? 6 : 2}
+            value={form.notes || ''}
+            onChange={(e) => set('notes', e.target.value)}
+            placeholder="Summary, translated clauses, or any notes…"
+          />
         </Field>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>

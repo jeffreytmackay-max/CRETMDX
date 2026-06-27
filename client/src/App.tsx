@@ -6,6 +6,7 @@ import MapView from './pages/MapView';
 import Leases from './pages/Leases';
 import Transactions from './pages/Transactions';
 import Financial from './pages/Financial';
+import Settings from './pages/Settings';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '▦', end: true },
@@ -14,6 +15,7 @@ const NAV = [
   { to: '/leases', label: 'Lease Administration', icon: '▤' },
   { to: '/transactions', label: 'Transactions', icon: '⇄' },
   { to: '/financial', label: 'Financial Modeling', icon: '∑' },
+  { to: '/settings', label: 'Settings', icon: '⚙' },
 ];
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
@@ -109,6 +111,7 @@ export default function App() {
           <Route path="/leases" element={<Leases />} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/financial" element={<Financial />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
     </div>
