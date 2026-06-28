@@ -7,7 +7,7 @@ core workflows plus an interactive location map:
 | --- | --- |
 | **Dashboard** | Portfolio KPIs, upcoming critical dates, portfolio mix, pipeline value. |
 | **Map** | Leaflet / OpenStreetMap view of every site, color-coded by property type, with detail popups. |
-| **Properties** | CRUD for buildings — location, type, rentable area, market, coordinates. |
+| **Properties** | CRUD for buildings — location, building type, rentable area, coordinates. |
 | **Lease Administration** | CBRE-style lease abstracts grouped into General, Dates, Area, Financial, Parking, and Options sections (execution & rent-start dates, duration, usable area, loss factor, building type/use, lead broker, rent-calc type, currency, parking). Critical-date tracking, auto-generated rent schedules, and **AI PDF abstraction** — upload one or many lease PDFs and Claude extracts the terms (including the new fields), summarizes options/clauses/notes, and translates foreign-language clauses. Original PDFs are attached to each lease record. |
 | **Compare Leases** | Side-by-side comparison of up to four leases, with the most favorable value highlighted per row (incl. computed rent/SF, effective rent/SF, and total base rent over term). |
 | **Reports** | Rent roll, lease-expiration schedule, projected rent obligations by year, critical dates, deal pipeline, and a portfolio summary — each with **CSV export** and **Print / Save-as-PDF**. Individual leases also export a one-page printable abstract. |
@@ -32,8 +32,9 @@ Brand tokens are centralized: the Tailwind color scales are remapped in
 - **Frontend** — Vite + React + TypeScript, Tailwind CSS v4, React Router,
   [react-leaflet](https://react-leaflet.js.org/) for the map, and
   [Recharts](https://recharts.org/) for charts.
-- **Data** — A SQLite file is created and seeded with a realistic 12-property
-  sample portfolio (offices, industrial, retail, warehouse) across US markets.
+- **Data** — The browser build seeds the live TransMedics real estate portfolio
+  (30 sites — Headquarters, Research and Development, NOP Hubs, Multi-Use, and
+  Aviation), categorized by Building Type.
 
 ## Two ways to run
 

@@ -9,7 +9,7 @@ db.exec("DELETE FROM sqlite_sequence WHERE name IN ('properties','leases','trans
 interface PropSeed {
   name: string; address: string; city: string; state: string; zip: string;
   lat: number; lng: number; property_type: string; rentable_sqft: number;
-  status: string; market: string;
+  status: string; market?: string;
 }
 
 const properties: PropSeed[] = [
@@ -29,12 +29,12 @@ const properties: PropSeed[] = [
 
 console.log(`Inserting ${properties.length} properties...`);
 const insertProp = db.prepare(
-  `INSERT INTO properties (name, address, city, state, zip, lat, lng, property_type, rentable_sqft, status, market)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  `INSERT INTO properties (name, address, city, state, zip, lat, lng, property_type, rentable_sqft, status)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 );
 const propIds: number[] = [];
 for (const p of properties) {
-  const info = insertProp.run(p.name, p.address, p.city, p.state, p.zip, p.lat, p.lng, p.property_type, p.rentable_sqft, p.status, p.market);
+  const info = insertProp.run(p.name, p.address, p.city, p.state, p.zip, p.lat, p.lng, p.property_type, p.rentable_sqft, p.status);
   propIds.push(Number(info.lastInsertRowid));
 }
 

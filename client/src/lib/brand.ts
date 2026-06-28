@@ -17,13 +17,13 @@ export const BRAND = {
   info: '#44546A',
 };
 
-// Categorical palette for property types / map markers.
+// Categorical palette for property types / map markers (TransMedics Building Types).
 export const PROPERTY_TYPE_COLOR: Record<string, string> = {
-  Office: BRAND.crimson,
-  Retail: BRAND.coral,
-  Industrial: BRAND.info,
-  Warehouse: BRAND.peach,
-  Land: BRAND.success,
+  Headquarters: BRAND.crimson,
+  'Research and Development': BRAND.rose,
+  'NOP Hub': BRAND.info,
+  'Multi-Use': BRAND.success,
+  Aviation: BRAND.coral,
 };
 
 // Ordered series palette for charts.

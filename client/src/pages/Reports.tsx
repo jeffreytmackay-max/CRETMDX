@@ -72,8 +72,8 @@ export default function Reports() {
       downloadCsv(
         'rent-roll.csv',
         toCsv(
-          ['Lease', 'Property', 'Market', 'Type', 'Rentable SF', 'Base Rent/yr', 'Rent/SF', 'OpEx/SF', 'Commencement', 'Expiration', 'Status'],
-          data.roll.map((r) => [r.lease, r.property, r.market, r.type, r.sqft, Math.round(r.baseRentAnnual), r.rentPsf.toFixed(2), r.opexPsf.toFixed(2), r.commencement, r.expiration, r.status]),
+          ['Lease', 'Property', 'State', 'Type', 'Rentable SF', 'Base Rent/yr', 'Rent/SF', 'OpEx/SF', 'Commencement', 'Expiration', 'Status'],
+          data.roll.map((r) => [r.lease, r.property, r.state, r.type, r.sqft, Math.round(r.baseRentAnnual), r.rentPsf.toFixed(2), r.opexPsf.toFixed(2), r.commencement, r.expiration, r.status]),
         ),
       );
     } else if (report === 'expirations') {
@@ -207,14 +207,14 @@ function SummaryReport({
     byType[p.property_type].count += 1;
     byType[p.property_type].sqft += p.rentable_sqft || 0;
   }
-  const byMarket: Record<string, { count: number; sqft: number; rent: number }> = {};
+  const byState: Record<string, { count: number; sqft: number; rent: number }> = {};
   const propById = new Map(properties.map((p) => [p.id, p]));
   for (const l of leases) {
-    const m = propById.get(l.property_id)?.market || '—';
-    byMarket[m] = byMarket[m] || { count: 0, sqft: 0, rent: 0 };
-    byMarket[m].count += 1;
-    byMarket[m].sqft += l.rentable_sqft || 0;
-    byMarket[m].rent += l.status === 'Active' ? l.base_rent_annual || 0 : 0;
+    const m = propById.get(l.property_id)?.state || '—';
+    byState[m] = byState[m] || { count: 0, sqft: 0, rent: 0 };
+    byState[m].count += 1;
+    byState[m].sqft += l.rentable_sqft || 0;
+    byState[m].rent += l.status === 'Active' ? l.base_rent_annual || 0 : 0;
   }
 
   return (
@@ -239,11 +239,11 @@ function SummaryReport({
       </Card>
 
       <Card className="p-5">
-        <SectionTitle>By Market</SectionTitle>
+        <SectionTitle>By State</SectionTitle>
         <table className="w-full text-sm">
-          <thead><tr className="border-b border-slate-200"><Th>Market</Th><Th right>Leases</Th><Th right>Rentable SF</Th><Th right>Active Rent/yr</Th></tr></thead>
+          <thead><tr className="border-b border-slate-200"><Th>State</Th><Th right>Leases</Th><Th right>Rentable SF</Th><Th right>Active Rent/yr</Th></tr></thead>
           <tbody>
-            {Object.entries(byMarket).sort((a, b) => b[1].rent - a[1].rent).map(([m, v]) => (
+            {Object.entries(byState).sort((a, b) => b[1].rent - a[1].rent).map(([m, v]) => (
               <tr key={m} className="border-b border-slate-100"><Td>{m}</Td><Td right>{num(v.count)}</Td><Td right>{num(v.sqft)}</Td><Td right>{usd(v.rent)}</Td></tr>
             ))}
           </tbody>
@@ -274,12 +274,12 @@ function RentRollReport({ rows }: { rows: ReturnType<typeof rentRoll> }) {
   return (
     <Card className="overflow-x-auto scroll-touch p-0">
       <table className="w-full min-w-[820px] text-sm">
-        <thead><tr className="border-b border-slate-200"><Th>Lease</Th><Th>Market</Th><Th right>SF</Th><Th right>Base Rent/yr</Th><Th right>Rent/SF</Th><Th>Expiration</Th><Th>Status</Th></tr></thead>
+        <thead><tr className="border-b border-slate-200"><Th>Lease</Th><Th>State</Th><Th right>SF</Th><Th right>Base Rent/yr</Th><Th right>Rent/SF</Th><Th>Expiration</Th><Th>Status</Th></tr></thead>
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className="border-b border-slate-100">
               <Td><span className="font-medium text-slate-800">{r.lease}</span><div className="text-xs text-slate-400">{r.property}</div></Td>
-              <Td>{r.market}</Td><Td right>{num(r.sqft)}</Td><Td right>{usd(r.baseRentAnnual)}</Td>
+              <Td>{r.state}</Td><Td right>{num(r.sqft)}</Td><Td right>{usd(r.baseRentAnnual)}</Td>
               <Td right>{usd(r.rentPsf, 2)}</Td><Td>{fmtDate(r.expiration)}</Td><Td>{r.status}</Td>
             </tr>
           ))}

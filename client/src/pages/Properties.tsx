@@ -13,7 +13,13 @@ import {
   Spinner,
 } from '../components/ui';
 
-const PROPERTY_TYPES = ['Office', 'Retail', 'Industrial', 'Warehouse', 'Land'];
+const PROPERTY_TYPES = [
+  'Headquarters',
+  'Research and Development',
+  'NOP Hub',
+  'Multi-Use',
+  'Aviation',
+];
 const STATUSES = ['Active', 'Under Review', 'Disposed'];
 
 const EMPTY: Partial<Property> = {
@@ -22,12 +28,12 @@ const EMPTY: Partial<Property> = {
   city: '',
   state: '',
   zip: '',
+  country: 'USA',
   lat: 39.5,
   lng: -98.35,
-  property_type: 'Office',
+  property_type: 'NOP Hub',
   rentable_sqft: 0,
   status: 'Active',
-  market: '',
 };
 
 export default function Properties() {
@@ -88,7 +94,7 @@ export default function Properties() {
                 <td className="px-5 py-3 font-medium text-slate-800">{p.name}</td>
                 <td className="px-5 py-3 text-slate-600">
                   {p.city}, {p.state}
-                  <div className="text-xs text-slate-400">{p.market}</div>
+                  <div className="text-xs text-slate-400">{p.country}</div>
                 </td>
                 <td className="px-5 py-3">
                   <Badge>{p.property_type}</Badge>
@@ -206,8 +212,8 @@ function PropertyForm({
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Market">
-            <Input value={form.market || ''} onChange={(e) => set('market', e.target.value)} />
+          <Field label="Country">
+            <Input value={form.country || ''} onChange={(e) => set('country', e.target.value)} />
           </Field>
           <Field label="Status">
             <Select value={form.status} onChange={(e) => set('status', e.target.value)}>

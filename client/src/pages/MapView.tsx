@@ -91,8 +91,8 @@ export default function MapView() {
                     <span className="font-medium">{p.property_type}</span>
                     <span className="text-slate-500">Sq Ft</span>
                     <span className="font-medium">{num(p.rentable_sqft)}</span>
-                    <span className="text-slate-500">Market</span>
-                    <span className="font-medium">{p.market}</span>
+                    <span className="text-slate-500">Country</span>
+                    <span className="font-medium">{p.country}</span>
                     <span className="text-slate-500">Status</span>
                     <span className="font-medium">{p.status}</span>
                   </div>

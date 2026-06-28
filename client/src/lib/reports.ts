@@ -6,7 +6,7 @@ import type { Property, Lease, Transaction } from './types';
 export interface RentRollRow {
   lease: string;
   property: string;
-  market: string;
+  state: string;
   type: string;
   sqft: number;
   baseRentAnnual: number;
@@ -25,7 +25,7 @@ export function rentRoll(properties: Property[], leases: Lease[]): RentRollRow[]
       return {
         lease: l.lease_name,
         property: p?.name || l.property_name || '—',
-        market: p?.market || '—',
+        state: p?.state || l.property_state || '—',
         type: `${l.role} · ${l.lease_type}`,
         sqft: l.rentable_sqft || 0,
         baseRentAnnual: l.base_rent_annual || 0,
