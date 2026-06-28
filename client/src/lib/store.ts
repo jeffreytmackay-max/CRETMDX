@@ -50,6 +50,25 @@ export function clearData(): void {
   save(db);
 }
 
+// Full portfolio snapshot for export/backup.
+export function exportData(): DB {
+  return {
+    properties: db.properties,
+    leases: db.leases,
+    transactions: db.transactions,
+  };
+}
+
+// Replace the portfolio with imported data (used by Import / restore).
+export function importData(d: Partial<DB>): void {
+  db = {
+    properties: Array.isArray(d.properties) ? d.properties : [],
+    leases: Array.isArray(d.leases) ? d.leases : [],
+    transactions: Array.isArray(d.transactions) ? d.transactions : [],
+  };
+  save(db);
+}
+
 const nextId = (rows: { id: number }[]) => rows.reduce((m, r) => Math.max(m, r.id), 0) + 1;
 
 // ---- Properties ----

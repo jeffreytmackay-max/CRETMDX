@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { getApiKey, setApiKey } from '../lib/ai';
-import { resetData, clearData } from '../lib/store';
-import { clearAllPdfs } from '../lib/pdfStore';
+import { resetData, clearData, exportData, importData } from '../lib/store';
+import { clearAllPdfs, exportAllPdfs, importPdfs } from '../lib/pdfStore';
 import { Button, Card, Field, Input, SectionTitle } from '../components/ui';
 
 export default function Settings() {
@@ -19,6 +19,56 @@ export default function Settings() {
     if (confirm('Reset all data back to the seeded sample portfolio? This clears your edits.')) {
       resetData();
       location.reload();
+    }
+  }
+
+  const [busy, setBusy] = useState('');
+
+  async function exportBackup() {
+    setBusy('Preparing export…');
+    try {
+      const payload = {
+        app: 'cretmdx',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        data: exportData(),
+        pdfs: await exportAllPdfs(),
+      };
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transmedics-portfolio-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } finally {
+      setBusy('');
+    }
+  }
+
+  async function importBackup(file: File) {
+    if (
+      !confirm(
+        'Importing replaces ALL data in this browser with the contents of the file. Continue?',
+      )
+    )
+      return;
+    setBusy('Importing…');
+    try {
+      const obj = JSON.parse(await file.text());
+      if (!obj || typeof obj !== 'object' || !obj.data) {
+        alert('That file is not a valid portfolio export.');
+        return;
+      }
+      importData(obj.data);
+      if (Array.isArray(obj.pdfs)) await importPdfs(obj.pdfs);
+      location.reload();
+    } catch {
+      alert('Could not read that file. Make sure it is a portfolio export (.json).');
+    } finally {
+      setBusy('');
     }
   }
 
@@ -114,6 +164,36 @@ export default function Settings() {
             <strong>Reset</strong> reloads the sample portfolio. <strong>Clear all</strong> empties
             everything in this browser and does not re-seed — use this to start from a blank
             portfolio.
+          </p>
+        </Card>
+
+        <Card className="p-5 lg:col-span-2">
+          <SectionTitle>Backup &amp; Transfer Between Devices</SectionTitle>
+          <p className="mb-4 text-sm text-slate-600">
+            Because data lives in this browser, use Export to download your entire portfolio (every
+            property, lease, transaction, and attached PDF) as a single file. Then open the app on
+            another device and use Import to load it there. The same file is also a full backup.
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={exportBackup}>⤓ Export data</Button>
+            <label className="cursor-pointer rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              ⤒ Import data
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importBackup(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+            {busy && <span className="text-sm text-slate-500">{busy}</span>}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            Import <strong>replaces</strong> everything currently in this browser. Want automatic
+            live sync across devices instead? That needs a shared database — ask and we'll set it up.
           </p>
         </Card>
       </div>

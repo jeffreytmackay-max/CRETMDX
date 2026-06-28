@@ -70,6 +70,54 @@ export async function deletePdf(id: number): Promise<void> {
   }
 }
 
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+function base64ToBytes(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+export interface PdfExport {
+  id: number;
+  name: string;
+  type: string;
+  data: string; // base64
+}
+
+export async function exportAllPdfs(): Promise<PdfExport[]> {
+  const ids = await listPdfIds();
+  const out: PdfExport[] = [];
+  for (const id of ids) {
+    const rec = await getPdf(id);
+    if (!rec) continue;
+    const buf = await rec.blob.arrayBuffer();
+    out.push({ id, name: rec.name, type: rec.type, data: bytesToBase64(new Uint8Array(buf)) });
+  }
+  return out;
+}
+
+export async function importPdfs(items: PdfExport[]): Promise<void> {
+  await clearAllPdfs();
+  for (const p of items) {
+    try {
+      const bytes = base64ToBytes(p.data);
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: p.type || 'application/pdf' });
+      const file = new File([blob], p.name || 'lease.pdf', { type: p.type || 'application/pdf' });
+      await savePdf(p.id, file);
+    } catch {
+      /* skip malformed entry */
+    }
+  }
+}
+
 export async function clearAllPdfs(): Promise<void> {
   try {
     const db = await openDb();
