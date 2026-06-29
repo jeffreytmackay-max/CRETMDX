@@ -32,6 +32,13 @@ jobs:
       - name: Build
         working-directory: client
         run: npm run build
+        env:
+          # Optional: set these as repo Variables (Settings → Secrets and
+          # variables → Actions → Variables) so the hosted app auto-connects to
+          # the cloud backend and only asks users to sign in. Left blank, the app
+          # runs in local browser-only mode. The anon key is a public key.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/configure-pages@v5
         with:
           enablement: true

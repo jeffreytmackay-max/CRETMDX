@@ -145,52 +145,55 @@ export const store = {
   },
 
   // ---- Dashboard ----
-  dashboard: (): DashboardData => {
-    const properties = db.properties;
-    const leases = db.leases;
-    const transactions = db.transactions;
-
-    const totalSqft = properties.reduce((s, p) => s + (p.rentable_sqft || 0), 0);
-    const annualRent = leases
-      .filter((l) => l.status === 'Active')
-      .reduce((s, l) => s + (l.base_rent_annual || 0), 0);
-
-    const today = new Date();
-    const horizon = new Date();
-    horizon.setMonth(horizon.getMonth() + 18);
-    const criticalDates = leases
-      .map((l) => ({
-        leaseId: l.id,
-        leaseName: l.lease_name,
-        type: 'Expiration',
-        date: l.expiration_date,
-      }))
-      .filter((d) => d.date && new Date(d.date) >= today && new Date(d.date) <= horizon)
-      .sort((a, b) => +new Date(a.date) - +new Date(b.date));
-
-    const pipelineValue = transactions
-      .filter((t) => !['Closed', 'Executed', 'Dead'].includes(t.stage))
-      .reduce((s, t) => s + (t.estimated_value || 0) * ((t.probability || 0) / 100), 0);
-
-    const byType: Record<string, number> = {};
-    for (const p of properties) byType[p.property_type] = (byType[p.property_type] || 0) + 1;
-
-    return {
-      counts: {
-        properties: properties.length,
-        leases: leases.length,
-        activeLeases: leases.filter((l) => l.status === 'Active').length,
-        transactions: transactions.length,
-      },
-      totalSqft,
-      annualRent,
-      pipelineValue,
-      weightedPipeline: pipelineValue,
-      criticalDates,
-      propertiesByType: byType,
-    };
-  },
+  dashboard: (): DashboardData => dashboardFrom(db.properties, db.leases, db.transactions),
 };
+
+// Pure dashboard rollup, shared by the local store and the Supabase backend.
+export function dashboardFrom(
+  properties: Property[],
+  leases: Lease[],
+  transactions: Transaction[],
+): DashboardData {
+  const totalSqft = properties.reduce((s, p) => s + (p.rentable_sqft || 0), 0);
+  const annualRent = leases
+    .filter((l) => l.status === 'Active')
+    .reduce((s, l) => s + (l.base_rent_annual || 0), 0);
+
+  const today = new Date();
+  const horizon = new Date();
+  horizon.setMonth(horizon.getMonth() + 18);
+  const criticalDates = leases
+    .map((l) => ({
+      leaseId: l.id,
+      leaseName: l.lease_name,
+      type: 'Expiration',
+      date: l.expiration_date,
+    }))
+    .filter((d) => d.date && new Date(d.date) >= today && new Date(d.date) <= horizon)
+    .sort((a, b) => +new Date(a.date) - +new Date(b.date));
+
+  const pipelineValue = transactions
+    .filter((t) => !['Closed', 'Executed', 'Dead'].includes(t.stage))
+    .reduce((s, t) => s + (t.estimated_value || 0) * ((t.probability || 0) / 100), 0);
+
+  const byType: Record<string, number> = {};
+  for (const p of properties) byType[p.property_type] = (byType[p.property_type] || 0) + 1;
+
+  return {
+    counts: {
+      properties: properties.length,
+      leases: leases.length,
+      activeLeases: leases.filter((l) => l.status === 'Active').length,
+      transactions: transactions.length,
+    },
+    totalSqft,
+    annualRent,
+    pipelineValue,
+    weightedPipeline: pipelineValue,
+    criticalDates,
+    propertiesByType: byType,
+  };
+}
 
 export function leaseTermYears(start?: string, end?: string): number {
   if (!start || !end) return 10;

@@ -3,6 +3,14 @@ import { getApiKey, setApiKey } from '../lib/ai';
 import { resetData, clearData, exportData, importData } from '../lib/store';
 import { clearAllPdfs, exportAllPdfs, importPdfs } from '../lib/pdfStore';
 import { Button, Card, Field, Input, SectionTitle } from '../components/ui';
+import {
+  getSupabaseConfig,
+  setSupabaseConfig,
+  clearSupabaseConfig,
+  isSupabaseConfigured,
+} from '../lib/supabase';
+import { signOut } from '../lib/auth';
+import { pushLocalToCloud } from '../lib/cloud';
 
 export default function Settings() {
   const [key, setKey] = useState(getApiKey());
@@ -93,6 +101,10 @@ export default function Settings() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="lg:col-span-2">
+          <BackendCard />
+        </div>
+
         <Card className="p-5">
           <SectionTitle>Anthropic API Key</SectionTitle>
           <p className="mb-4 text-sm text-slate-600">
@@ -192,11 +204,140 @@ export default function Settings() {
             {busy && <span className="text-sm text-slate-500">{busy}</span>}
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            Import <strong>replaces</strong> everything currently in this browser. Want automatic
-            live sync across devices instead? That needs a shared database — ask and we'll set it up.
+            Import <strong>replaces</strong> everything currently in this browser. For automatic live
+            sync across devices, connect the cloud backend at the top of this page.
           </p>
         </Card>
       </div>
     </div>
+  );
+}
+
+// Connect/disconnect the Supabase cloud backend and migrate local data up to it.
+function BackendCard() {
+  const cfg = getSupabaseConfig();
+  const [url, setUrl] = useState(cfg.url);
+  const [anonKey, setAnonKey] = useState(cfg.anonKey);
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState('');
+  const connected = isSupabaseConfigured();
+
+  function connect() {
+    if (!/^https?:\/\/.+/.test(url.trim()) || anonKey.trim().length < 20) {
+      setMsg('Enter a valid Project URL and anon key.');
+      return;
+    }
+    setSupabaseConfig(url, anonKey);
+    // Reload so the client is recreated and the sign-in gate appears.
+    location.reload();
+  }
+
+  function disconnect() {
+    if (
+      confirm(
+        'Disconnect this device from the cloud backend? The app will return to local browser-only ' +
+          'data. Your cloud data is not deleted.',
+      )
+    ) {
+      clearSupabaseConfig();
+      location.reload();
+    }
+  }
+
+  async function migrate() {
+    if (
+      !confirm(
+        "Upload THIS browser's current portfolio to the cloud? This adds its properties, leases, " +
+          'and transactions to the shared database (it does not remove anything already there).',
+      )
+    )
+      return;
+    setBusy('Uploading…');
+    setMsg('');
+    try {
+      const data = exportData();
+      const res = await pushLocalToCloud(data.properties, data.leases, data.transactions);
+      setMsg(
+        `Uploaded ${res.properties} properties, ${res.leases} leases, and ${res.transactions} ` +
+          'transactions. Reload to see them.',
+      );
+    } catch (e) {
+      setMsg('Upload failed: ' + (e instanceof Error ? e.message : 'unknown error'));
+    } finally {
+      setBusy('');
+    }
+  }
+
+  let host = '';
+  try {
+    host = new URL(getSupabaseConfig().url).host;
+  } catch {
+    /* ignore */
+  }
+
+  return (
+    <Card className="p-5">
+      <SectionTitle>Cloud Backend &amp; Live Sync</SectionTitle>
+      {connected ? (
+        <>
+          <p className="mb-3 text-sm text-slate-600">
+            Connected to <strong>{host}</strong>. Your portfolio is stored in the shared cloud
+            database and stays in sync across every signed-in device.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={migrate}>⬆ Upload this browser's data to the cloud</Button>
+            <Button variant="ghost" onClick={() => signOut()}>
+              Sign out
+            </Button>
+            <Button variant="danger" onClick={disconnect}>
+              Disconnect this device
+            </Button>
+          </div>
+          {busy && <p className="mt-3 text-sm text-slate-500">{busy}</p>}
+          {msg && <p className="mt-3 text-sm font-medium text-slate-700">{msg}</p>}
+          <p className="mt-3 text-xs text-slate-500">
+            Use <strong>Upload</strong> once, from the device that has your real portfolio, to seed
+            the cloud. Other devices just sign in — they'll see the same data.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="mb-3 text-sm text-slate-600">
+            Connect a free Supabase project to store the portfolio in the cloud with sign-in and
+            live sync across devices. Paste your project's URL and{' '}
+            <strong>anon/public</strong> key (Supabase → Project Settings → API). The anon key is
+            safe to use in the app; access is protected by login and row-level security.
+          </p>
+          <div className="space-y-3">
+            <Field label="Project URL">
+              <Input
+                placeholder="https://xxxxxxxx.supabase.co"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Anon / public key">
+              <Input
+                type="password"
+                placeholder="eyJhbGci..."
+                value={anonKey}
+                onChange={(e) => setAnonKey(e.target.value)}
+                autoComplete="off"
+              />
+            </Field>
+          </div>
+          <div className="mt-3">
+            <Button onClick={connect}>Connect</Button>
+          </div>
+          {msg && <p className="mt-3 text-sm font-medium text-rose-600">{msg}</p>}
+          <p className="mt-3 text-xs text-slate-500">
+            First time? You'll also need to run the one-time setup SQL (creating the tables and
+            security rules) in your Supabase project. See <code>supabase/README.md</code> in the
+            repository.
+          </p>
+        </>
+      )}
+    </Card>
   );
 }

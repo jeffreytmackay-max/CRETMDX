@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import Properties from './pages/Properties';
@@ -9,8 +10,11 @@ import Financial from './pages/Financial';
 import Compare from './pages/Compare';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import Login from './pages/Login';
 import { Brand } from './components/Logo';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Spinner } from './components/ui';
+import { backendEnabled, getSession, onAuthChange, signOut } from './lib/auth';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '▦', end: true },
@@ -52,6 +56,27 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 export default function App() {
   const [navOpen, setNavOpen] = useState(false);
 
+  // Auth gate: when the cloud backend is configured, require a signed-in session
+  // before showing the app. In local-only mode (no backend), render immediately.
+  const enabled = backendEnabled();
+  const [session, setSession] = useState<Session | null | undefined>(enabled ? undefined : null);
+  useEffect(() => {
+    if (!enabled) return;
+    getSession().then(setSession);
+    return onAuthChange(setSession);
+  }, [enabled]);
+
+  if (enabled && session === undefined) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center">
+        <Spinner label="Loading…" />
+      </div>
+    );
+  }
+  if (enabled && !session) return <Login />;
+
+  const accountEmail = session?.user?.email;
+
   return (
     <div className="flex h-[100dvh] flex-col md:flex-row">
       {/* Desktop sidebar */}
@@ -61,7 +86,18 @@ export default function App() {
         </div>
         <NavList />
         <div className="border-t border-slate-200 p-4 text-xs text-slate-400">
-          Demo portfolio · seeded data
+          {enabled ? (
+            <div className="space-y-1">
+              <div className="truncate text-slate-500" title={accountEmail || ''}>
+                {accountEmail}
+              </div>
+              <button className="font-medium text-blue-600 hover:underline" onClick={() => signOut()}>
+                Sign out
+              </button>
+            </div>
+          ) : (
+            'Local data · this browser'
+          )}
         </div>
       </aside>
 

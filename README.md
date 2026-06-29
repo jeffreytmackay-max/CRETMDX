@@ -38,15 +38,21 @@ Brand tokens are centralized: the Tailwind color scales are remapped in
 
 ## Two ways to run
 
-This project ships in two modes:
+This project ships in three modes:
 
 1. **Browser-only (no server)** — the app runs entirely in the browser with the
    sample portfolio built in and your edits saved to `localStorage`. This is what
    gets deployed to GitHub Pages and what the single-file build uses. No backend
    needed.
-2. **Full-stack (shared database)** — the original Express + `node:sqlite` API with
-   a real database. Restore it by pointing `client/src/lib/api.ts` back at `fetch`
-   (the file documents this) and running the server below.
+2. **Cloud backend (Supabase)** — recommended for shared, cross-device data with
+   sign-in and live sync. The app talks directly to a managed Postgres database;
+   no server to host. The `api` layer (`client/src/lib/api.ts`) automatically
+   switches to the cloud when Supabase is configured (via Settings or the
+   `VITE_SUPABASE_*` build vars) and falls back to local browser storage
+   otherwise. One-time setup: [`supabase/README.md`](./supabase/README.md).
+3. **Full-stack (self-hosted)** — the original Express + `node:sqlite` API. Restore
+   it by pointing `client/src/lib/api.ts` back at `fetch` and running the server
+   below.
 
 ### Open it instantly (single file)
 
