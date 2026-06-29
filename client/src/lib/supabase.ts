@@ -11,8 +11,18 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 const URL_KEY = 'cretmdx:supabase_url';
 const ANON_KEY = 'cretmdx:supabase_key';
 
-const envUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || '';
-const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || '';
+// Built-in project defaults so every deployed copy connects out of the box and
+// only asks users to sign in. The publishable/anon key is a public, RLS-protected
+// key — safe to ship in a client bundle; data access is gated by login + Row-Level
+// Security, NOT by hiding this key. Override order: Settings (localStorage) > env
+// vars (VITE_SUPABASE_*) > these defaults.
+const DEFAULT_URL = 'https://mztgsygmypbepzkdfrro.supabase.co';
+const DEFAULT_KEY = 'sb_publishable_RE-TtmTbM7aVWZKKcFo4SQ_akJtVkPr';
+
+const envUrl =
+  (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || DEFAULT_URL;
+const envKey =
+  (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || DEFAULT_KEY;
 
 function ls(key: string): string {
   try {
