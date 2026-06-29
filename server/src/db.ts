@@ -28,6 +28,7 @@ export function initSchema(): void {
       property_type TEXT DEFAULT 'Office',
       rentable_sqft INTEGER DEFAULT 0,
       status TEXT DEFAULT 'Active',
+      ownership TEXT DEFAULT 'Leased',
       notes TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );

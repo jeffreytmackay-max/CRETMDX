@@ -11,6 +11,7 @@ export interface Property {
   property_type: string;
   rentable_sqft: number;
   status: string;
+  ownership: string;
   notes?: string;
 }
 

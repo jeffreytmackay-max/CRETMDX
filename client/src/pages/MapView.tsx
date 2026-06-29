@@ -89,6 +89,8 @@ export default function MapView() {
                   <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
                     <span className="text-slate-500">Type</span>
                     <span className="font-medium">{p.property_type}</span>
+                    <span className="text-slate-500">Ownership</span>
+                    <span className="font-medium">{p.ownership}</span>
                     <span className="text-slate-500">Sq Ft</span>
                     <span className="font-medium">{num(p.rentable_sqft)}</span>
                     <span className="text-slate-500">Country</span>

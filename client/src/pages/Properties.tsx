@@ -21,6 +21,7 @@ const PROPERTY_TYPES = [
   'Aviation',
 ];
 const STATUSES = ['Active', 'Under Review', 'Disposed'];
+const OWNERSHIP_TYPES = ['Leased', 'Owned', 'Condo'];
 
 const EMPTY: Partial<Property> = {
   name: '',
@@ -34,6 +35,7 @@ const EMPTY: Partial<Property> = {
   property_type: 'NOP Hub',
   rentable_sqft: 0,
   status: 'Active',
+  ownership: 'Leased',
 };
 
 export default function Properties() {
@@ -83,6 +85,7 @@ export default function Properties() {
               <th className="px-5 py-3">Name</th>
               <th className="px-5 py-3">Location</th>
               <th className="px-5 py-3">Type</th>
+              <th className="px-5 py-3">Ownership</th>
               <th className="px-5 py-3 text-right">Rentable SF</th>
               <th className="px-5 py-3">Status</th>
               <th className="px-5 py-3"></th>
@@ -99,6 +102,7 @@ export default function Properties() {
                 <td className="px-5 py-3">
                   <Badge>{p.property_type}</Badge>
                 </td>
+                <td className="px-5 py-3 text-slate-600">{p.ownership}</td>
                 <td className="px-5 py-3 text-right tabular-nums text-slate-700">
                   {num(p.rentable_sqft)}
                 </td>
@@ -211,9 +215,16 @@ function PropertyForm({
             />
           </Field>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Field label="Country">
             <Input value={form.country || ''} onChange={(e) => set('country', e.target.value)} />
+          </Field>
+          <Field label="Ownership">
+            <Select value={form.ownership} onChange={(e) => set('ownership', e.target.value)}>
+              {OWNERSHIP_TYPES.map((o) => (
+                <option key={o}>{o}</option>
+              ))}
+            </Select>
           </Field>
           <Field label="Status">
             <Select value={form.status} onChange={(e) => set('status', e.target.value)}>
