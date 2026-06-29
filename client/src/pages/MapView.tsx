@@ -43,6 +43,9 @@ export default function MapView() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string>('All');
+  // Tracks whether the basemap tiles actually loaded, so we can explain a blank
+  // background (offline / network blocking the tile CDN) instead of leaving it gray.
+  const [tilesOk, setTilesOk] = useState(true);
 
   useEffect(() => {
     api.properties().then((p) => {
@@ -107,9 +110,14 @@ export default function MapView() {
           <ResizeHandler />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            url="https://{s}.basemap.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+            url="https://{s}.basemap.cartocdn.com/light_all/{z}/{x}/{y}.png"
             subdomains="abcd"
-            maxZoom={20}
+            maxZoom={19}
+            eventHandlers={{
+              load: () => setTilesOk(true),
+              tileload: () => setTilesOk(true),
+              tileerror: () => setTilesOk(false),
+            }}
           />
           {mappable.map((p) => (
             <Marker
@@ -161,6 +169,19 @@ export default function MapView() {
             ))}
           </div>
         </Card>
+
+        {!tilesOk && (
+          <div className="pointer-events-none absolute left-1/2 top-6 z-[600] w-[min(92%,420px)] -translate-x-1/2">
+            <div className="rounded-xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-center text-xs text-amber-800 shadow-sm">
+              <div className="font-semibold">Map background couldn't load</div>
+              <div className="mt-0.5">
+                Your site pins are placed correctly, but the map imagery needs an internet
+                connection and isn't being reached — you may be offline or on a network that blocks
+                the map tile service.
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
