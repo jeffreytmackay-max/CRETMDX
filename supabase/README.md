@@ -36,15 +36,18 @@ Real lease/financial data should not be open to the public.
 > rules permit, and those require a signed-in user. Do **not** paste the
 > `service_role` key anywhere.
 
-## 5. Move your existing portfolio up
-On the **one device that already has your real portfolio** (e.g. the 30
-TransMedics sites):
+## 5. Load the portfolio
+Two ways — pick one (do it only once):
 
-1. Sign in, go to **Settings → Cloud Backend & Live Sync**.
-2. Click **Upload this browser's data to the cloud**.
-3. Reload. Every signed-in device now sees the same data.
+**A. Straight from SQL (no app needed).** In **SQL Editor → New query**, paste
+all of [`load_portfolio.sql`](./load_portfolio.sql) and **Run**. It loads the 30
+TransMedics properties + the 188 Assembly Park lease, and skips itself if the
+table already has rows (so it's safe to re-run).
 
-Do this only once — running it again would create duplicates.
+**B. From a browser that already has your data.** Sign in →
+**Settings → Cloud Backend & Live Sync** → **Upload this browser's data to the
+cloud**. Reload. Every signed-in device then sees the same data. Do this only
+once — running it again would create duplicates.
 
 ## Making every device auto-connect (optional, recommended)
 So new devices only need to sign in (no pasting the URL/key), bake the values
