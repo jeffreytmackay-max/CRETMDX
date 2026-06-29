@@ -58,6 +58,16 @@ export default function MapView() {
   const filtered = properties.filter(
     (p) => typeFilter === 'All' || p.property_type === typeFilter,
   );
+  // A marker with a missing/NaN coordinate makes Leaflet throw and blanks the
+  // whole map, so only plot sites with valid numeric coordinates. Note that an
+  // unset coordinate serializes to null in localStorage (JSON has no NaN), and
+  // Number(null) is 0, so guard null/'' explicitly and drop the (0,0) origin.
+  const validCoord = (v: unknown) =>
+    v !== null && v !== undefined && v !== '' && Number.isFinite(Number(v));
+  const hasCoords = (p: Property) =>
+    validCoord(p.lat) && validCoord(p.lng) && !(Number(p.lat) === 0 && Number(p.lng) === 0);
+  const mappable = filtered.filter(hasCoords);
+  const missing = filtered.length - mappable.length;
 
   if (loading) return <Spinner label="Loading map…" />;
 
@@ -66,7 +76,14 @@ export default function MapView() {
       <div className="flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-4 md:flex-row md:items-center md:justify-between md:px-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Location Map</h1>
-          <p className="text-sm text-slate-500">{filtered.length} sites across the portfolio</p>
+          <p className="text-sm text-slate-500">
+            {mappable.length} of {filtered.length} sites mapped
+            {missing > 0 && (
+              <span className="text-amber-600">
+                {' '}· {missing} hidden (missing coordinates)
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {types.map((t) => (
@@ -85,8 +102,8 @@ export default function MapView() {
         </div>
       </div>
 
-      <div className="relative flex-1">
-        <MapContainer center={[39.5, -96]} zoom={4} scrollWheelZoom>
+      <div className="relative flex-1" style={{ minHeight: '60vh' }}>
+        <MapContainer center={[39.5, -96]} zoom={4} scrollWheelZoom style={{ height: '100%' }}>
           <ResizeHandler />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -94,10 +111,10 @@ export default function MapView() {
             subdomains="abcd"
             maxZoom={20}
           />
-          {filtered.map((p) => (
+          {mappable.map((p) => (
             <Marker
               key={p.id}
-              position={[p.lat, p.lng]}
+              position={[Number(p.lat), Number(p.lng)]}
               icon={markerIcon(TYPE_COLOR[p.property_type] || '#75787B')}
             >
               <Popup>

@@ -10,6 +10,7 @@ import Compare from './pages/Compare';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import { Brand } from './components/Logo';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '▦', end: true },
@@ -100,6 +101,7 @@ export default function App() {
       )}
 
       <main className="flex-1 overflow-y-auto scroll-touch">
+        <ErrorBoundary>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/map" element={<MapView />} />
@@ -111,6 +113,7 @@ export default function App() {
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   );
