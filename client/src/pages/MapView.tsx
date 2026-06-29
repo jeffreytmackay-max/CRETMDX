@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
+import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
@@ -20,6 +20,23 @@ function markerIcon(color: string) {
     iconAnchor: [9, 18],
     popupAnchor: [0, -18],
   });
+}
+
+// Leaflet renders gray/blank tiles if its container's size changes after the map
+// initializes (common when mounted inside a flex layout, or when the tab/route
+// becomes visible). Nudge it to re-measure on mount and on window resize.
+function ResizeHandler() {
+  const map = useMap();
+  useEffect(() => {
+    const fix = () => map.invalidateSize();
+    const t = setTimeout(fix, 0);
+    window.addEventListener('resize', fix);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('resize', fix);
+    };
+  }, [map]);
+  return null;
 }
 
 export default function MapView() {
@@ -70,9 +87,12 @@ export default function MapView() {
 
       <div className="relative flex-1">
         <MapContainer center={[39.5, -96]} zoom={4} scrollWheelZoom>
+          <ResizeHandler />
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url="https://{s}.basemap.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+            subdomains="abcd"
+            maxZoom={20}
           />
           {filtered.map((p) => (
             <Marker
