@@ -20,7 +20,7 @@ import {
   toCsv,
   downloadCsv,
 } from '../lib/reports';
-import { Button, Card, SectionTitle, Spinner, StatCard } from '../components/ui';
+import { Button, Card, Select, SectionTitle, Spinner, StatCard } from '../components/ui';
 import { Monogram } from '../components/Logo';
 
 type ReportKey = 'summary' | 'rentroll' | 'expirations' | 'obligations' | 'critical' | 'pipeline';
@@ -47,6 +47,12 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<ReportKey>('summary');
 
+  // Interactive filters — narrow the dataset that feeds every report/chart.
+  const [fType, setFType] = useState('All');
+  const [fOwnership, setFOwnership] = useState('All');
+  const [fState, setFState] = useState('All');
+  const [fStatus, setFStatus] = useState('All');
+
   useEffect(() => {
     Promise.all([api.properties(), api.leases(), api.transactions()]).then(([p, l, t]) => {
       setProperties(p);
@@ -56,15 +62,54 @@ export default function Reports() {
     });
   }, []);
 
+  const distinct = (vals: (string | undefined)[]) =>
+    Array.from(new Set(vals.filter((v): v is string => !!v))).sort();
+  const typeOptions = useMemo(() => distinct(properties.map((p) => p.property_type)), [properties]);
+  const ownershipOptions = useMemo(() => distinct(properties.map((p) => p.ownership)), [properties]);
+  const stateOptions = useMemo(() => distinct(properties.map((p) => p.state)), [properties]);
+  const statusOptions = useMemo(() => distinct(leases.map((l) => l.status)), [leases]);
+
+  const propFilterActive = fType !== 'All' || fOwnership !== 'All' || fState !== 'All';
+  const filtersActive = propFilterActive || fStatus !== 'All';
+
+  const filteredProperties = useMemo(
+    () =>
+      properties.filter(
+        (p) =>
+          (fType === 'All' || p.property_type === fType) &&
+          (fOwnership === 'All' || p.ownership === fOwnership) &&
+          (fState === 'All' || p.state === fState),
+      ),
+    [properties, fType, fOwnership, fState],
+  );
+  const filteredLeases = useMemo(() => {
+    const ids = new Set(filteredProperties.map((p) => p.id));
+    return leases.filter(
+      (l) => ids.has(l.property_id) && (fStatus === 'All' || l.status === fStatus),
+    );
+  }, [leases, filteredProperties, fStatus]);
+  const filteredTransactions = useMemo(() => {
+    if (!propFilterActive) return transactions;
+    const ids = new Set(filteredProperties.map((p) => p.id));
+    return transactions.filter((t) => t.property_id != null && ids.has(t.property_id));
+  }, [transactions, filteredProperties, propFilterActive]);
+
+  function resetFilters() {
+    setFType('All');
+    setFOwnership('All');
+    setFState('All');
+    setFStatus('All');
+  }
+
   const data = useMemo(
     () => ({
-      roll: rentRoll(properties, leases),
-      exp: expirationSchedule(leases),
-      obl: futureObligations(leases, 10),
-      crit: criticalDates(properties, leases, 24),
-      pipe: pipelineByStage(transactions),
+      roll: rentRoll(filteredProperties, filteredLeases),
+      exp: expirationSchedule(filteredLeases),
+      obl: futureObligations(filteredLeases, 10),
+      crit: criticalDates(filteredProperties, filteredLeases, 24),
+      pipe: pipelineByStage(filteredTransactions),
     }),
-    [properties, leases, transactions],
+    [filteredProperties, filteredLeases, filteredTransactions],
   );
 
   function exportCsv() {
@@ -121,7 +166,7 @@ export default function Reports() {
         </div>
       </div>
 
-      <div className="no-print mb-6 flex flex-wrap gap-2">
+      <div className="no-print mb-4 flex flex-wrap gap-2">
         {REPORTS.map((r) => (
           <button
             key={r.key}
@@ -134,6 +179,33 @@ export default function Reports() {
           </button>
         ))}
       </div>
+
+      {/* Interactive filters — apply to every report */}
+      <div className="no-print mb-6 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <FilterSelect label="Property Type" value={fType} onChange={setFType} options={typeOptions} />
+          <FilterSelect label="Ownership" value={fOwnership} onChange={setFOwnership} options={ownershipOptions} />
+          <FilterSelect label="State" value={fState} onChange={setFState} options={stateOptions} />
+          <FilterSelect label="Lease Status" value={fStatus} onChange={setFStatus} options={statusOptions} />
+          {filtersActive && (
+            <Button variant="ghost" onClick={resetFilters}>
+              Reset filters
+            </Button>
+          )}
+        </div>
+        <div className="mt-2 text-xs text-slate-500">
+          Showing <strong>{filteredProperties.length}</strong> of {properties.length} properties ·{' '}
+          <strong>{filteredLeases.length}</strong> of {leases.length} leases
+          {filtersActive && <span className="text-blue-600"> · filters applied</span>}
+        </div>
+      </div>
+
+      {/* Filters line on paper, when any filter is active */}
+      {filtersActive && (
+        <div className="mb-3 hidden text-xs text-slate-500 print:block">
+          Filters — Type: {fType} · Ownership: {fOwnership} · State: {fState} · Lease Status: {fStatus}
+        </div>
+      )}
 
       {/* Print header (visible on paper) */}
       <div className="mb-5 hidden items-center justify-between border-b-2 border-[#9D2235] pb-3 print:flex">
@@ -152,7 +224,9 @@ export default function Reports() {
         </div>
       </div>
 
-      {report === 'summary' && <SummaryReport properties={properties} leases={leases} data={data} />}
+      {report === 'summary' && (
+        <SummaryReport properties={filteredProperties} leases={filteredLeases} data={data} />
+      )}
       {report === 'rentroll' && <RentRollReport rows={data.roll} />}
       {report === 'expirations' && <ExpirationsReport rows={data.exp} />}
       {report === 'obligations' && <ObligationsReport rows={data.obl} />}
@@ -162,6 +236,34 @@ export default function Reports() {
       {/* Print footer (visible on paper) */}
       <div className="mt-8 hidden border-t border-slate-300 pt-2 text-[10px] uppercase tracking-wider text-slate-400 print:block">
         TransMedics — Real Estate Portfolio · Confidential · Generated {today}
+      </div>
+    </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  return (
+    <div>
+      <div className="mb-1 text-xs font-medium text-slate-500">{label}</div>
+      <div className="w-44">
+        <Select value={value} onChange={(e) => onChange(e.target.value)}>
+          <option value="All">All</option>
+          {options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </Select>
       </div>
     </div>
   );
