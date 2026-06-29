@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -25,8 +25,32 @@ import {
   Spinner,
   Textarea,
 } from '../components/ui';
+import { SortGroupBar } from '../components/SortGroupBar';
+import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 
 type Filter = 'all' | 'expiring' | 'active';
+
+const SORTS: SortOption<Lease>[] = [
+  { key: 'expiration_date', label: 'Expiration', get: (l) => l.expiration_date || '' },
+  { key: 'lease_name', label: 'Lease', get: (l) => l.lease_name || '' },
+  { key: 'property_name', label: 'Property', get: (l) => l.property_name || '' },
+  { key: 'lease_type', label: 'Type', get: (l) => l.lease_type || '' },
+  { key: 'rentable_sqft', label: 'Sq Ft', get: (l) => l.rentable_sqft || 0 },
+  { key: 'base_rent_annual', label: 'Base Rent/yr', get: (l) => l.base_rent_annual || 0 },
+  { key: 'status', label: 'Status', get: (l) => l.status || '' },
+];
+const GROUPS: GroupOption<Lease>[] = [
+  { key: 'none', label: 'None', get: () => '' },
+  { key: 'status', label: 'Status', get: (l) => l.status || '—' },
+  { key: 'property_name', label: 'Property', get: (l) => l.property_name || '—' },
+  { key: 'lease_type', label: 'Lease Type', get: (l) => l.lease_type || '—' },
+  { key: 'building_type', label: 'Building Type', get: (l) => l.building_type || '—' },
+  {
+    key: 'exp_year',
+    label: 'Expiration Year',
+    get: (l) => (l.expiration_date ? l.expiration_date.slice(0, 4) : '—'),
+  },
+];
 
 export default function Leases() {
   const [leases, setLeases] = useState<Lease[]>([]);
@@ -34,6 +58,9 @@ export default function Leases() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>('all');
   const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('expiration_date');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [groupKey, setGroupKey] = useState('none');
   const [detailId, setDetailId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Partial<Lease> | null>(null);
   const [editingFile, setEditingFile] = useState<File | null>(null);
@@ -71,6 +98,12 @@ export default function Leases() {
       );
     return rows;
   }, [leases, filter, search]);
+
+  const groups = useMemo(() => {
+    const sorted = sortRows(filtered, SORTS.find((s) => s.key === sortKey), sortDir);
+    const groupOpt = groupKey === 'none' ? undefined : GROUPS.find((g) => g.key === groupKey);
+    return groupRows(sorted, groupOpt);
+  }, [filtered, sortKey, sortDir, groupKey]);
 
   async function save(form: Partial<Lease>, file?: File | null) {
     let id = form.id;
@@ -141,6 +174,19 @@ export default function Leases() {
         </div>
       </div>
 
+      <div className="mb-4">
+        <SortGroupBar
+          sortKey={sortKey}
+          setSortKey={setSortKey}
+          sortDir={sortDir}
+          setSortDir={setSortDir}
+          groupKey={groupKey}
+          setGroupKey={setGroupKey}
+          sortChoices={SORTS}
+          groupChoices={GROUPS}
+        />
+      </div>
+
       <Card className="overflow-x-auto scroll-touch">
         <table className="w-full min-w-[760px] text-sm">
           <thead>
@@ -155,12 +201,24 @@ export default function Leases() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((l) => {
-              const months = monthsUntil(l.expiration_date);
-              const noticeDate = addMonths(l.expiration_date, -(l.notice_period_months || 0));
-              const noticeMonths = monthsUntil(noticeDate);
-              return (
-                <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
+            {groups.map((g) => (
+              <Fragment key={g.key || 'all'}>
+                {groupKey !== 'none' && (
+                  <tr className="bg-slate-50/70">
+                    <td
+                      colSpan={7}
+                      className="px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                    >
+                      {g.key} <span className="text-slate-400">· {g.rows.length}</span>
+                    </td>
+                  </tr>
+                )}
+                {g.rows.map((l) => {
+                  const months = monthsUntil(l.expiration_date);
+                  const noticeDate = addMonths(l.expiration_date, -(l.notice_period_months || 0));
+                  const noticeMonths = monthsUntil(noticeDate);
+                  return (
+                    <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2">
                       <button
@@ -216,9 +274,11 @@ export default function Leases() {
                       Delete
                     </button>
                   </td>
-                </tr>
-              );
-            })}
+                    </tr>
+                  );
+                })}
+              </Fragment>
+            ))}
           </tbody>
         </table>
       </Card>

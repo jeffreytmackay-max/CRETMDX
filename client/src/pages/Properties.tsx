@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import type { Property } from '../lib/types';
 import { num } from '../lib/format';
@@ -12,6 +12,8 @@ import {
   Select,
   Spinner,
 } from '../components/ui';
+import { SortGroupBar } from '../components/SortGroupBar';
+import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 
 const PROPERTY_TYPES = [
   'Headquarters',
@@ -22,6 +24,23 @@ const PROPERTY_TYPES = [
 ];
 const STATUSES = ['Active', 'Under Review', 'Disposed'];
 const OWNERSHIP_TYPES = ['Leased', 'Owned', 'Condo'];
+
+const SORTS: SortOption<Property>[] = [
+  { key: 'name', label: 'Name', get: (p) => p.name || '' },
+  { key: 'location', label: 'Location', get: (p) => `${p.state || ''} ${p.city || ''}` },
+  { key: 'property_type', label: 'Type', get: (p) => p.property_type || '' },
+  { key: 'ownership', label: 'Ownership', get: (p) => p.ownership || '' },
+  { key: 'rentable_sqft', label: 'Rentable SF', get: (p) => p.rentable_sqft || 0 },
+  { key: 'status', label: 'Status', get: (p) => p.status || '' },
+];
+const GROUPS: GroupOption<Property>[] = [
+  { key: 'none', label: 'None', get: () => '' },
+  { key: 'property_type', label: 'Type', get: (p) => p.property_type || '—' },
+  { key: 'ownership', label: 'Ownership', get: (p) => p.ownership || '—' },
+  { key: 'state', label: 'State', get: (p) => p.state || '—' },
+  { key: 'country', label: 'Country', get: (p) => p.country || '—' },
+  { key: 'status', label: 'Status', get: (p) => p.status || '—' },
+];
 
 const EMPTY: Partial<Property> = {
   name: '',
@@ -42,6 +61,15 @@ export default function Properties() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Property> | null>(null);
+  const [sortKey, setSortKey] = useState('name');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [groupKey, setGroupKey] = useState('none');
+
+  const groups = useMemo(() => {
+    const sorted = sortRows(properties, SORTS.find((s) => s.key === sortKey), sortDir);
+    const groupOpt = groupKey === 'none' ? undefined : GROUPS.find((g) => g.key === groupKey);
+    return groupRows(sorted, groupOpt);
+  }, [properties, sortKey, sortDir, groupKey]);
 
   const load = () =>
     api.properties().then((p) => {
@@ -78,6 +106,19 @@ export default function Properties() {
         <Button onClick={() => setEditing(EMPTY)}>+ Add Property</Button>
       </div>
 
+      <div className="mb-4">
+        <SortGroupBar
+          sortKey={sortKey}
+          setSortKey={setSortKey}
+          sortDir={sortDir}
+          setSortDir={setSortDir}
+          groupKey={groupKey}
+          setGroupKey={setGroupKey}
+          sortChoices={SORTS}
+          groupChoices={GROUPS}
+        />
+      </div>
+
       <Card className="overflow-x-auto scroll-touch">
         <table className="w-full min-w-[640px] text-sm">
           <thead>
@@ -92,38 +133,52 @@ export default function Properties() {
             </tr>
           </thead>
           <tbody>
-            {properties.map((p) => (
-              <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="px-5 py-3 font-medium text-slate-800">{p.name}</td>
-                <td className="px-5 py-3 text-slate-600">
-                  {p.city}, {p.state}
-                  <div className="text-xs text-slate-400">{p.country}</div>
-                </td>
-                <td className="px-5 py-3">
-                  <Badge>{p.property_type}</Badge>
-                </td>
-                <td className="px-5 py-3 text-slate-600">{p.ownership}</td>
-                <td className="px-5 py-3 text-right tabular-nums text-slate-700">
-                  {num(p.rentable_sqft)}
-                </td>
-                <td className="px-5 py-3">
-                  <Badge>{p.status}</Badge>
-                </td>
-                <td className="px-5 py-3 text-right">
-                  <button
-                    className="mr-3 text-xs font-medium text-blue-600 hover:underline"
-                    onClick={() => setEditing(p)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="text-xs font-medium text-rose-600 hover:underline"
-                    onClick={() => remove(p.id)}
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
+            {groups.map((g) => (
+              <Fragment key={g.key || 'all'}>
+                {groupKey !== 'none' && (
+                  <tr className="bg-slate-50/70">
+                    <td
+                      colSpan={7}
+                      className="px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                    >
+                      {g.key} <span className="text-slate-400">· {g.rows.length}</span>
+                    </td>
+                  </tr>
+                )}
+                {g.rows.map((p) => (
+                  <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-5 py-3 font-medium text-slate-800">{p.name}</td>
+                    <td className="px-5 py-3 text-slate-600">
+                      {p.city}, {p.state}
+                      <div className="text-xs text-slate-400">{p.country}</div>
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge>{p.property_type}</Badge>
+                    </td>
+                    <td className="px-5 py-3 text-slate-600">{p.ownership}</td>
+                    <td className="px-5 py-3 text-right tabular-nums text-slate-700">
+                      {num(p.rentable_sqft)}
+                    </td>
+                    <td className="px-5 py-3">
+                      <Badge>{p.status}</Badge>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <button
+                        className="mr-3 text-xs font-medium text-blue-600 hover:underline"
+                        onClick={() => setEditing(p)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="text-xs font-medium text-rose-600 hover:underline"
+                        onClick={() => remove(p.id)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </Fragment>
             ))}
           </tbody>
         </table>
