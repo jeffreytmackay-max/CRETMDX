@@ -32,31 +32,51 @@ export default function Settings() {
 
   const [busy, setBusy] = useState('');
 
+  // Build the backup JSON string. PDFs are optional so the copy-to-clipboard
+  // fallback can stay small (structured data only).
+  async function buildPayload(includePdfs: boolean): Promise<string> {
+    const data = isSupabaseConfigured() ? await exportAll() : exportData();
+    const payload = {
+      app: 'cretmdx',
+      version: 1,
+      source: isSupabaseConfigured() ? 'cloud' : 'local',
+      exportedAt: new Date().toISOString(),
+      data,
+      pdfs: includePdfs ? await exportAllPdfs() : [],
+    };
+    return JSON.stringify(payload);
+  }
+
   async function exportBackup() {
     setBusy('Preparing export…');
     try {
-      // Pull from whichever backend is live so the file reflects the data the
-      // user actually sees: the cloud when connected, else this browser.
-      const data = isSupabaseConfigured() ? await exportAll() : exportData();
-      const payload = {
-        app: 'cretmdx',
-        version: 1,
-        source: isSupabaseConfigured() ? 'cloud' : 'local',
-        exportedAt: new Date().toISOString(),
-        data,
-        pdfs: await exportAllPdfs(),
-      };
-      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      // Saved as .txt (same JSON content) because many managed computers block
+      // downloading .json by extension. Import reads it back regardless of name.
+      const text = await buildPayload(true);
+      const blob = new Blob([text], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `transmedics-portfolio-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `transmedics-portfolio-${new Date().toISOString().slice(0, 10)}.txt`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } finally {
       setBusy('');
+    }
+  }
+
+  async function copyBackup() {
+    setBusy('Copying…');
+    try {
+      // Structured data only (no PDFs) to keep the clipboard manageable.
+      await navigator.clipboard.writeText(await buildPayload(false));
+      setBusy('Copied to clipboard ✓');
+      setTimeout(() => setBusy(''), 2500);
+    } catch {
+      setBusy('');
+      alert('Could not copy to clipboard. Try the Export (.txt) button instead.');
     }
   }
 
@@ -213,12 +233,15 @@ export default function Settings() {
             )}
           </p>
           <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={exportBackup}>⤓ Export data</Button>
+            <Button onClick={exportBackup}>⤓ Export data (.txt)</Button>
+            <Button variant="ghost" onClick={copyBackup}>
+              ⧉ Copy data to clipboard
+            </Button>
             <label className="cursor-pointer rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
               ⤒ Import data
               <input
                 type="file"
-                accept="application/json,.json"
+                accept=".txt,.json,application/json,text/plain"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -230,8 +253,9 @@ export default function Settings() {
             {busy && <span className="text-sm text-slate-500">{busy}</span>}
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            Import <strong>replaces</strong> everything currently in this browser. For automatic live
-            sync across devices, connect the cloud backend at the top of this page.
+            The download is saved as a <strong>.txt</strong> file (some managed computers block
+            <code> .json</code>); it still imports normally. <strong>Copy to clipboard</strong> is a
+            no-download alternative — paste it anywhere to save or share. Import accepts either.
           </p>
         </Card>
       </div>
