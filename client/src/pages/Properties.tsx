@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
-import type { Property } from '../lib/types';
-import { num } from '../lib/format';
+import type { Property, Lease } from '../lib/types';
+import { num, usd, usdCompact } from '../lib/format';
 import {
   Badge,
   Button,
@@ -59,11 +59,22 @@ const EMPTY: Partial<Property> = {
 
 export default function Properties() {
   const [properties, setProperties] = useState<Property[]>([]);
+  const [leases, setLeases] = useState<Lease[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Property> | null>(null);
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [groupKey, setGroupKey] = useState('none');
+
+  // Annual rent per property = sum of its active leases' base rent.
+  const rentByProperty = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const l of leases) {
+      if (l.status !== 'Active') continue;
+      m.set(l.property_id, (m.get(l.property_id) || 0) + (l.base_rent_annual || 0));
+    }
+    return m;
+  }, [leases]);
 
   const groups = useMemo(() => {
     const sorted = sortRows(properties, SORTS.find((s) => s.key === sortKey), sortDir);
@@ -71,9 +82,14 @@ export default function Properties() {
     return groupRows(sorted, groupOpt);
   }, [properties, sortKey, sortDir, groupKey]);
 
+  const sumSqft = (rows: Property[]) => rows.reduce((s, p) => s + (p.rentable_sqft || 0), 0);
+  const sumRent = (rows: Property[]) =>
+    rows.reduce((s, p) => s + (rentByProperty.get(p.id) || 0), 0);
+
   const load = () =>
-    api.properties().then((p) => {
+    Promise.all([api.properties(), api.leases()]).then(([p, l]) => {
       setProperties(p);
+      setLeases(l);
       setLoading(false);
     });
 
@@ -120,7 +136,7 @@ export default function Properties() {
       </div>
 
       <Card className="overflow-x-auto scroll-touch">
-        <table className="w-full min-w-[640px] text-sm">
+        <table className="w-full min-w-[760px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-5 py-3">Name</th>
@@ -128,6 +144,7 @@ export default function Properties() {
               <th className="px-5 py-3">Type</th>
               <th className="px-5 py-3">Ownership</th>
               <th className="px-5 py-3 text-right">Rentable SF</th>
+              <th className="px-5 py-3 text-right">Annual Rent</th>
               <th className="px-5 py-3">Status</th>
               <th className="px-5 py-3"></th>
             </tr>
@@ -138,7 +155,7 @@ export default function Properties() {
                 {groupKey !== 'none' && (
                   <tr className="bg-slate-50/70">
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
                     >
                       {g.key} <span className="text-slate-400">· {g.rows.length}</span>
@@ -159,6 +176,9 @@ export default function Properties() {
                     <td className="px-5 py-3 text-right tabular-nums text-slate-700">
                       {num(p.rentable_sqft)}
                     </td>
+                    <td className="px-5 py-3 text-right tabular-nums text-slate-700">
+                      {rentByProperty.get(p.id) ? usdCompact(rentByProperty.get(p.id)!) : '—'}
+                    </td>
                     <td className="px-5 py-3">
                       <Badge>{p.status}</Badge>
                     </td>
@@ -178,9 +198,33 @@ export default function Properties() {
                     </td>
                   </tr>
                 ))}
+                {groupKey !== 'none' && (
+                  <tr className="border-b border-slate-200 bg-slate-50/40 text-slate-600">
+                    <td colSpan={4} className="px-5 py-2 text-xs font-medium">
+                      {g.key} subtotal · {g.rows.length}
+                    </td>
+                    <td className="px-5 py-2 text-right text-xs font-semibold tabular-nums">
+                      {num(sumSqft(g.rows))}
+                    </td>
+                    <td className="px-5 py-2 text-right text-xs font-semibold tabular-nums">
+                      {usdCompact(sumRent(g.rows))}
+                    </td>
+                    <td colSpan={2}></td>
+                  </tr>
+                )}
               </Fragment>
             ))}
           </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold text-slate-800">
+              <td colSpan={4} className="px-5 py-3">
+                Total · {num(properties.length)} properties
+              </td>
+              <td className="px-5 py-3 text-right tabular-nums">{num(sumSqft(properties))}</td>
+              <td className="px-5 py-3 text-right tabular-nums">{usd(sumRent(properties))}</td>
+              <td colSpan={2}></td>
+            </tr>
+          </tfoot>
         </table>
       </Card>
 
