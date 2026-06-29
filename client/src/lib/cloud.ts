@@ -157,6 +157,45 @@ export async function deleteTransaction(id: number): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+async function listLeasesRaw(): Promise<Lease[]> {
+  return rawLeases();
+}
+
+// Full snapshot of the cloud portfolio (raw rows), for download/backup.
+export async function exportAll(): Promise<{
+  properties: Property[];
+  leases: Lease[];
+  transactions: Transaction[];
+}> {
+  const [properties, leases, transactions] = await Promise.all([
+    listProperties(),
+    listLeasesRaw(),
+    listTransactions(),
+  ]);
+  return { properties, leases, transactions };
+}
+
+// Replace the entire cloud portfolio with the given snapshot (used by Import).
+// Clears existing rows, then re-inserts with id remapping. Destructive by design
+// — the Import flow warns the user first.
+export async function replaceAll(data: {
+  properties?: Property[];
+  leases?: Lease[];
+  transactions?: Transaction[];
+}): Promise<{ properties: number; leases: number; transactions: number }> {
+  const c = sb();
+  // Delete transactions first, then properties (leases cascade via FK).
+  let err = (await c.from('transactions').delete().gte('id', 0)).error;
+  if (err) throw new Error(err.message);
+  err = (await c.from('properties').delete().gte('id', 0)).error;
+  if (err) throw new Error(err.message);
+  return pushLocalToCloud(
+    data.properties || [],
+    data.leases || [],
+    data.transactions || [],
+  );
+}
+
 // ---- Bulk helpers ----
 export async function countAll(): Promise<{ properties: number; leases: number; transactions: number }> {
   const c = sb();

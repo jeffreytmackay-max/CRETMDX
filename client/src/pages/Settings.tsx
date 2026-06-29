@@ -10,7 +10,7 @@ import {
   isSupabaseConfigured,
 } from '../lib/supabase';
 import { signOut } from '../lib/auth';
-import { pushLocalToCloud } from '../lib/cloud';
+import { pushLocalToCloud, exportAll, replaceAll } from '../lib/cloud';
 
 export default function Settings() {
   const [key, setKey] = useState(getApiKey());
@@ -35,11 +35,15 @@ export default function Settings() {
   async function exportBackup() {
     setBusy('Preparing export…');
     try {
+      // Pull from whichever backend is live so the file reflects the data the
+      // user actually sees: the cloud when connected, else this browser.
+      const data = isSupabaseConfigured() ? await exportAll() : exportData();
       const payload = {
         app: 'cretmdx',
         version: 1,
+        source: isSupabaseConfigured() ? 'cloud' : 'local',
         exportedAt: new Date().toISOString(),
-        data: exportData(),
+        data,
         pdfs: await exportAllPdfs(),
       };
       const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
@@ -57,9 +61,13 @@ export default function Settings() {
   }
 
   async function importBackup(file: File) {
+    const cloud = isSupabaseConfigured();
     if (
       !confirm(
-        'Importing replaces ALL data in this browser with the contents of the file. Continue?',
+        cloud
+          ? 'Importing REPLACES ALL data in the shared cloud database with the contents of the ' +
+              'file (it affects every signed-in device). Continue?'
+          : 'Importing replaces ALL data in this browser with the contents of the file. Continue?',
       )
     )
       return;
@@ -70,11 +78,18 @@ export default function Settings() {
         alert('That file is not a valid portfolio export.');
         return;
       }
-      importData(obj.data);
+      if (cloud) {
+        await replaceAll(obj.data);
+      } else {
+        importData(obj.data);
+      }
       if (Array.isArray(obj.pdfs)) await importPdfs(obj.pdfs);
       location.reload();
-    } catch {
-      alert('Could not read that file. Make sure it is a portfolio export (.json).');
+    } catch (e) {
+      alert(
+        'Import failed: ' +
+          (e instanceof Error ? e.message : 'Make sure it is a portfolio export (.json).'),
+      );
     } finally {
       setBusy('');
     }
@@ -180,11 +195,22 @@ export default function Settings() {
         </Card>
 
         <Card className="p-5 lg:col-span-2">
-          <SectionTitle>Backup &amp; Transfer Between Devices</SectionTitle>
+          <SectionTitle>Backup &amp; Download Current Data</SectionTitle>
           <p className="mb-4 text-sm text-slate-600">
-            Because data lives in this browser, use Export to download your entire portfolio (every
-            property, lease, transaction, and attached PDF) as a single file. Then open the app on
-            another device and use Import to load it there. The same file is also a full backup.
+            {isSupabaseConfigured() ? (
+              <>
+                <strong>Export</strong> downloads a single file with your <strong>current cloud
+                data</strong> (every property, lease, and transaction) — a point-in-time backup you
+                can keep or share. <strong>Import replaces the shared cloud data</strong> with a
+                file's contents, so use it carefully. Attached PDFs are still stored per device.
+              </>
+            ) : (
+              <>
+                Use Export to download your entire portfolio (every property, lease, transaction, and
+                attached PDF) as a single file. Then open the app on another device and use Import to
+                load it there. The same file is also a full backup.
+              </>
+            )}
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={exportBackup}>⤓ Export data</Button>
