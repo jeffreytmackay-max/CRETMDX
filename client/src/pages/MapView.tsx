@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import type { Property } from '../lib/types';
 import { num } from '../lib/format';
 import { Card, Spinner } from '../components/ui';
+import { VectorBasemap } from '../components/VectorBasemap';
 
 import { PROPERTY_TYPE_COLOR as TYPE_COLOR } from '../lib/brand';
 
@@ -43,8 +44,10 @@ export default function MapView() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string>('All');
-  // Tracks whether the basemap tiles actually loaded, so we can explain a blank
-  // background (offline / network blocking the tile CDN) instead of leaving it gray.
+  // The bundled vector basemap always renders. Street tiles are an opt-in
+  // enhancement (off by default) because some networks block the tile CDN; we
+  // track whether they actually loaded so we can flag it if they don't.
+  const [showStreets, setShowStreets] = useState(false);
   const [tilesOk, setTilesOk] = useState(true);
 
   useEffect(() => {
@@ -102,23 +105,39 @@ export default function MapView() {
               {t}
             </button>
           ))}
+          <button
+            onClick={() => {
+              setShowStreets((v) => !v);
+              setTilesOk(true);
+            }}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+              showStreets ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+            title="Overlay detailed street map (requires internet; may be blocked on some networks)"
+          >
+            🛣 Street detail
+          </button>
         </div>
       </div>
 
       <div className="relative flex-1" style={{ minHeight: '60vh' }}>
         <MapContainer center={[39.5, -96]} zoom={4} scrollWheelZoom style={{ height: '100%' }}>
           <ResizeHandler />
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-            url="https://{s}.basemap.cartocdn.com/light_all/{z}/{x}/{y}.png"
-            subdomains="abcd"
-            maxZoom={19}
-            eventHandlers={{
-              load: () => setTilesOk(true),
-              tileload: () => setTilesOk(true),
-              tileerror: () => setTilesOk(false),
-            }}
-          />
+          {/* Always-available offline basemap (bundled country + state outlines). */}
+          <VectorBasemap />
+          {/* Optional online street tiles, layered on top when enabled. */}
+          {showStreets && (
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              url="https://{s}.basemap.cartocdn.com/light_all/{z}/{x}/{y}.png"
+              subdomains="abcd"
+              maxZoom={19}
+              eventHandlers={{
+                tileload: () => setTilesOk(true),
+                tileerror: () => setTilesOk(false),
+              }}
+            />
+          )}
           {mappable.map((p) => (
             <Marker
               key={p.id}
@@ -170,14 +189,14 @@ export default function MapView() {
           </div>
         </Card>
 
-        {!tilesOk && (
+        {showStreets && !tilesOk && (
           <div className="pointer-events-none absolute left-1/2 top-6 z-[600] w-[min(92%,420px)] -translate-x-1/2">
             <div className="rounded-xl border border-amber-200 bg-amber-50/95 px-4 py-3 text-center text-xs text-amber-800 shadow-sm">
-              <div className="font-semibold">Map background couldn't load</div>
+              <div className="font-semibold">Street detail couldn't load</div>
               <div className="mt-0.5">
-                Your site pins are placed correctly, but the map imagery needs an internet
-                connection and isn't being reached — you may be offline or on a network that blocks
-                the map tile service.
+                The street imagery needs an internet connection and isn't being reached (you may be
+                offline or on a network that blocks it). The outline map below still shows every
+                site — turn off “Street detail” to hide this.
               </div>
             </div>
           </div>

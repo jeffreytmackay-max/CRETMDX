@@ -84,6 +84,9 @@ body {
   height: 100%;
   width: 100%;
   z-index: 0;
+  /* "Sea" colour behind the bundled vector basemap (land is drawn warm-gray on
+     top). A soft blue-gray reads as water without competing with the brand. */
+  background: #e9eef1;
 }
 
 /* iOS Safari zooms the page when a focused form control has a font-size
