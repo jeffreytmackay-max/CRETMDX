@@ -15,14 +15,33 @@ import { api } from '../lib/api';
 import type { DashboardData } from '../lib/types';
 import { usd, usdCompact, num, fmtDate, daysUntil } from '../lib/format';
 import { Card, StatCard, SectionTitle, Spinner } from '../components/ui';
+import { backendEnabled } from '../lib/auth';
 
 import { CHART_SERIES } from '../lib/brand';
 
 const TYPE_COLORS = CHART_SERIES;
 
+const TIP_KEY = 'cretmdx:hideDataTip';
+
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string>();
+  const [showTip, setShowTip] = useState(() => {
+    try {
+      return localStorage.getItem(TIP_KEY) !== '1';
+    } catch {
+      return true;
+    }
+  });
+
+  function dismissTip() {
+    setShowTip(false);
+    try {
+      localStorage.setItem(TIP_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+  }
 
   useEffect(() => {
     api.dashboard().then(setData).catch((e) => setError(String(e)));
@@ -45,6 +64,39 @@ export default function Dashboard() {
           Snapshot of occupancy, lease obligations, and the active deal pipeline.
         </p>
       </div>
+
+      {showTip && (
+        <div className="mb-6 flex items-start justify-between gap-3 rounded-2xl border border-[#44546A]/20 bg-[#44546A]/5 p-4">
+          <div className="text-sm text-slate-700">
+            <div className="font-semibold text-slate-900">Updating your data</div>
+            <p className="mt-1 text-slate-600">
+              Make all changes right here in the app — on{' '}
+              <Link to="/properties" className="font-medium text-blue-600 hover:underline">
+                Properties
+              </Link>
+              ,{' '}
+              <Link to="/leases" className="font-medium text-blue-600 hover:underline">
+                Lease Administration
+              </Link>
+              , and{' '}
+              <Link to="/transactions" className="font-medium text-blue-600 hover:underline">
+                Transactions
+              </Link>
+              .{' '}
+              {backendEnabled()
+                ? 'Edits save to the cloud and sync to every signed-in device automatically — no files or uploads needed.'
+                : 'Edits save in this browser. Connect the cloud backend in Settings to sync across devices.'}
+            </p>
+          </div>
+          <button
+            onClick={dismissTip}
+            aria-label="Dismiss"
+            className="shrink-0 rounded-full px-2 py-0.5 text-lg leading-none text-slate-400 hover:bg-slate-200/60 hover:text-slate-600"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
