@@ -107,20 +107,23 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
-export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+export function Input({ className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+      className={`w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${className}`}
     />
   );
 }
 
-export function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function Textarea({
+  className = '',
+  ...props
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
       {...props}
-      className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+      className={`w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 ${className}`}
     />
   );
 }
@@ -146,12 +149,11 @@ export function Modal({
   return (
     <div
       className="fixed inset-0 z-[1000] flex items-start justify-center overflow-y-auto bg-slate-900/40 p-3 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] scroll-touch sm:py-10"
-      onClick={onClose}
     >
-      <div
-        className="my-auto w-full max-w-lg rounded-2xl bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+      {/* Intentionally NOT closing on backdrop click, so an accidental tap
+          outside the dialog never discards unsaved edits. Use ✕ or Cancel. */}
+      <div className="my-auto w-full max-w-lg rounded-2xl bg-white shadow-xl">
+
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
           <h3 className="font-semibold text-slate-900">{title}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700">

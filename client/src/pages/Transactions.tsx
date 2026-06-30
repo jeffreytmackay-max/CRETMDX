@@ -12,12 +12,42 @@ import {
   type TxnAttachment,
 } from '../lib/pdfStore';
 
-// Split a links textarea (one URL per line) into a clean list.
-function parseLinks(s?: string): string[] {
-  return (s || '')
+// Links are stored in the transaction's `links` text column as a JSON array of
+// { name, url }. Older records may hold plain newline/comma-separated URLs, so
+// parse both shapes.
+interface TxLink {
+  name: string;
+  url: string;
+}
+function parseLinks(s?: string): TxLink[] {
+  const t = (s || '').trim();
+  if (!t) return [];
+  if (t.startsWith('[')) {
+    try {
+      const arr = JSON.parse(t);
+      if (Array.isArray(arr)) {
+        return arr
+          .map((x) => ({ name: String(x?.name || ''), url: String(x?.url || '') }))
+          .filter((x) => x.url);
+      }
+    } catch {
+      /* fall through to legacy parsing */
+    }
+  }
+  return t
     .split(/[\n,]/)
     .map((x) => x.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((url) => ({ name: '', url }));
+}
+function serializeLinks(links: TxLink[]): string {
+  const clean = links
+    .map((l) => ({ name: l.name.trim(), url: l.url.trim() }))
+    .filter((l) => l.url);
+  return clean.length ? JSON.stringify(clean) : '';
+}
+function linkHref(url: string): string {
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
 // Internal corporate real estate (occupier) lifecycle — from an internal request
@@ -84,12 +114,26 @@ export default function Transactions() {
   }
 
   async function save(form: Partial<Transaction>, files?: File[]) {
-    let id = form.id;
-    if (id) await api.updateTransaction(id, form);
-    else id = (await api.createTransaction(form)).id;
-    if (files && id) for (const f of files) await addTxnAttachment(id, f);
-    setEditing(null);
-    load();
+    try {
+      let id = form.id;
+      if (id) await api.updateTransaction(id, form);
+      else id = (await api.createTransaction(form)).id;
+      if (files && id) for (const f of files) await addTxnAttachment(id, f);
+      setEditing(null);
+      load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/links/i.test(msg)) {
+        alert(
+          'Could not save. The cloud database is missing the “links” column. Run ' +
+            'supabase/add_transaction_links.sql once in Supabase → SQL Editor, then try again.\n\n' +
+            'Details: ' +
+            msg,
+        );
+      } else {
+        alert('Could not save this transaction: ' + msg);
+      }
+    }
   }
   async function remove(id: number) {
     if (!confirm('Delete this transaction?')) return;
@@ -224,6 +268,9 @@ function TxForm({
   const set = (k: keyof Transaction, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
   const [pending, setPending] = useState<File[]>([]);
   const [existing, setExisting] = useState<TxnAttachment[]>([]);
+  const [links, setLinks] = useState<TxLink[]>(parseLinks(initial.links));
+  const setLink = (i: number, patch: Partial<TxLink>) =>
+    setLinks((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
 
   useEffect(() => {
     if (form.id) listTxnAttachments(form.id).then(setExisting);
@@ -240,7 +287,7 @@ function TxForm({
         className="space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
-          onSave(form, pending);
+          onSave({ ...form, links: serializeLinks(links) }, pending);
         }}
       >
         <Field label="Project / Transaction Name">
@@ -334,27 +381,48 @@ function TxForm({
         </Field>
 
         <Field label="Links">
-          <Textarea
-            rows={2}
-            value={form.links || ''}
-            onChange={(e) => set('links', e.target.value)}
-            placeholder="One link per line — e.g. https://drive.google.com/…"
-          />
-          {parseLinks(form.links).length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-2">
-              {parseLinks(form.links).map((u, i) => (
-                <a
-                  key={i}
-                  href={u}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="truncate rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600 hover:underline"
+          <div className="space-y-2">
+            {links.map((l, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="w-1/3 shrink-0">
+                  <Input
+                    value={l.name}
+                    onChange={(e) => setLink(i, { name: e.target.value })}
+                    placeholder="Label (e.g. LOI)"
+                  />
+                </div>
+                <div className="flex-1">
+                  <Input
+                    value={l.url}
+                    onChange={(e) => setLink(i, { url: e.target.value })}
+                    placeholder="https://…"
+                  />
+                </div>
+                {l.url && (
+                  <a
+                    href={linkHref(l.url)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Open link"
+                    className="text-slate-400 hover:text-blue-600"
+                  >
+                    ↗
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setLinks((ls) => ls.filter((_, idx) => idx !== i))}
+                  className="text-rose-400 hover:text-rose-600"
+                  title="Remove link"
                 >
-                  🔗 {u.replace(/^https?:\/\//, '').slice(0, 40)}
-                </a>
-              ))}
-            </div>
-          )}
+                  ✕
+                </button>
+              </div>
+            ))}
+            <Button variant="ghost" onClick={() => setLinks((ls) => [...ls, { name: '', url: '' }])}>
+              + Add link
+            </Button>
+          </div>
         </Field>
 
         <Field label="Attachments">
