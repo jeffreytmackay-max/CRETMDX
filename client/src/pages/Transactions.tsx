@@ -46,6 +46,31 @@ function serializeLinks(links: TxLink[]): string {
     .filter((l) => l.url);
   return clean.length ? JSON.stringify(clean) : '';
 }
+
+// Device-local safety net for links, keyed by transaction id. Guarantees links
+// persist across reloads even if the cloud `links` column isn't there yet; the
+// cloud copy (when present) is preferred and syncs across devices.
+const LINKS_KEY = 'cretmdx:txnlinks';
+function readLinkMap(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(LINKS_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+function getLocalLinks(id: number): string {
+  return readLinkMap()[String(id)] || '';
+}
+function setLocalLinks(id: number, val: string): void {
+  const m = readLinkMap();
+  if (val) m[String(id)] = val;
+  else delete m[String(id)];
+  try {
+    localStorage.setItem(LINKS_KEY, JSON.stringify(m));
+  } catch {
+    /* storage unavailable */
+  }
+}
 function linkHref(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
@@ -82,7 +107,9 @@ export default function Transactions() {
   const [dragId, setDragId] = useState<number | null>(null);
 
   const load = async () => {
-    const [t, p] = await Promise.all([api.transactions(), api.properties()]);
+    const [tRaw, p] = await Promise.all([api.transactions(), api.properties()]);
+    // Prefer the cloud links value; fall back to the device-local copy.
+    const t = tRaw.map((x) => ({ ...x, links: x.links || getLocalLinks(x.id) }));
     setTxns(t);
     setProperties(p);
     setLoading(false);
@@ -115,30 +142,27 @@ export default function Transactions() {
 
   async function save(form: Partial<Transaction>, files?: File[]) {
     try {
-      let id = form.id;
-      if (id) await api.updateTransaction(id, form);
-      else id = (await api.createTransaction(form)).id;
-      if (files && id) for (const f of files) await addTxnAttachment(id, f);
+      const saved = form.id
+        ? await api.updateTransaction(form.id, form)
+        : await api.createTransaction(form);
+      const id = saved?.id ?? form.id;
+      if (id != null) {
+        // Always keep a device-local copy of the links so they never get lost.
+        setLocalLinks(id, form.links || '');
+        if (files) for (const f of files) await addTxnAttachment(id, f);
+      }
       setEditing(null);
       load();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (/links/i.test(msg)) {
-        alert(
-          'Could not save. The cloud database is missing the “links” column. Run ' +
-            'supabase/add_transaction_links.sql once in Supabase → SQL Editor, then try again.\n\n' +
-            'Details: ' +
-            msg,
-        );
-      } else {
-        alert('Could not save this transaction: ' + msg);
-      }
+      alert('Could not save this transaction: ' + msg);
     }
   }
   async function remove(id: number) {
     if (!confirm('Delete this transaction?')) return;
     await api.deleteTransaction(id);
     await deleteTxnAttachmentsFor(id);
+    setLocalLinks(id, '');
     load();
   }
 
