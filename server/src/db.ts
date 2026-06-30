@@ -83,6 +83,7 @@ export function initSchema(): void {
       start_date TEXT,
       target_close_date TEXT,
       notes TEXT,
+      links TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
 

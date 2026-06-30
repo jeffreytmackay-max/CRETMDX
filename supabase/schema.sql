@@ -75,8 +75,11 @@ create table if not exists public.transactions (
   start_date        text,
   target_close_date text,
   notes             text,
+  links             text,
   created_at        timestamptz default now()
 );
+-- For projects created before the links column existed:
+alter table public.transactions add column if not exists links text;
 
 create index if not exists leases_property_id_idx on public.leases(property_id);
 create index if not exists transactions_property_id_idx on public.transactions(property_id);

@@ -68,6 +68,7 @@ export interface Transaction {
   start_date: string;
   target_close_date: string;
   notes?: string;
+  links?: string; // one URL per line
 }
 
 export interface DashboardData {

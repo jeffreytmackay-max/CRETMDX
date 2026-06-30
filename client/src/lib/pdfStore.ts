@@ -5,8 +5,17 @@
 
 const DB_NAME = 'cretmdx';
 const STORE = 'pdfs';
+const TXN_STORE = 'txnAttachments';
 
 interface StoredPdf {
+  name: string;
+  type: string;
+  blob: Blob;
+}
+
+export interface TxnAttachment {
+  id: number;
+  txnId: number;
   name: string;
   type: string;
   blob: Blob;
@@ -18,10 +27,14 @@ function openDb(): Promise<IDBDatabase> {
       reject(new Error('IndexedDB unavailable'));
       return;
     }
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, 2);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      if (!db.objectStoreNames.contains(TXN_STORE)) {
+        const s = db.createObjectStore(TXN_STORE, { keyPath: 'id', autoIncrement: true });
+        s.createIndex('txnId', 'txnId', { unique: false });
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -150,7 +163,12 @@ export async function listPdfIds(): Promise<number[]> {
 export async function openPdf(id: number): Promise<boolean> {
   const stored = await getPdf(id);
   if (!stored) return false;
-  const url = URL.createObjectURL(stored.blob);
+  openBlob(stored.blob);
+  return true;
+}
+
+function openBlob(blob: Blob): void {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.target = '_blank';
@@ -159,5 +177,56 @@ export async function openPdf(id: number): Promise<boolean> {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  return true;
+}
+
+// ---- Transaction attachments (multiple files per transaction, device-local) ----
+export async function addTxnAttachment(txnId: number, file: File): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(TXN_STORE, 'readwrite');
+      tx.objectStore(TXN_STORE).add({ txnId, name: file.name, type: file.type, blob: file });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    /* attachments unavailable in this environment */
+  }
+}
+
+export async function listTxnAttachments(txnId: number): Promise<TxnAttachment[]> {
+  try {
+    const db = await openDb();
+    return await new Promise<TxnAttachment[]>((resolve, reject) => {
+      const tx = db.transaction(TXN_STORE, 'readonly');
+      const req = tx.objectStore(TXN_STORE).index('txnId').getAll(txnId);
+      req.onsuccess = () => resolve((req.result as TxnAttachment[]) || []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function deleteTxnAttachment(id: number): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(TXN_STORE, 'readwrite');
+      tx.objectStore(TXN_STORE).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function deleteTxnAttachmentsFor(txnId: number): Promise<void> {
+  const list = await listTxnAttachments(txnId);
+  for (const a of list) await deleteTxnAttachment(a.id);
+}
+
+export async function openTxnAttachment(att: TxnAttachment): Promise<void> {
+  openBlob(att.blob);
 }
