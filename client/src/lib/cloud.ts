@@ -133,22 +133,42 @@ export async function listTransactions(): Promise<Transaction[]> {
   return check(data, error) as Transaction[];
 }
 
+// If the project's schema is missing an optional column (e.g. `links` before the
+// migration is run), PostgREST returns a "could not find the 'x' column" error.
+// Return that column name so we can drop it and retry, keeping saves working.
+function missingColumn(msg?: string): string | null {
+  if (!msg) return null;
+  let m = msg.match(/could not find the '([^']+)' column/i);
+  if (m) return m[1];
+  m = msg.match(/column "([^"]+)" .*does not exist/i);
+  return m ? m[1] : null;
+}
+
+async function insertRow(table: string, row: Record<string, unknown>) {
+  let r = await sb().from(table).insert(row).select().single();
+  for (let col = missingColumn(r.error?.message); col && col in row; col = missingColumn(r.error?.message)) {
+    delete row[col];
+    r = await sb().from(table).insert(row).select().single();
+  }
+  return r;
+}
+
+async function updateRow(table: string, id: number, row: Record<string, unknown>) {
+  let r = await sb().from(table).update(row).eq('id', id).select().single();
+  for (let col = missingColumn(r.error?.message); col && col in row; col = missingColumn(r.error?.message)) {
+    delete row[col];
+    r = await sb().from(table).update(row).eq('id', id).select().single();
+  }
+  return r;
+}
+
 export async function createTransaction(body: Partial<Transaction>): Promise<Transaction> {
-  const { data, error } = await sb()
-    .from('transactions')
-    .insert(pick(body, TRANSACTION_COLS))
-    .select()
-    .single();
+  const { data, error } = await insertRow('transactions', pick(body, TRANSACTION_COLS));
   return check(data, error) as Transaction;
 }
 
 export async function updateTransaction(id: number, body: Partial<Transaction>): Promise<Transaction> {
-  const { data, error } = await sb()
-    .from('transactions')
-    .update(pick(body, TRANSACTION_COLS))
-    .eq('id', id)
-    .select()
-    .single();
+  const { data, error } = await updateRow('transactions', id, pick(body, TRANSACTION_COLS));
   return check(data, error) as Transaction;
 }
 
