@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Property, Lease } from '../lib/types';
-import { num, usd, usdCompact } from '../lib/format';
+import { num, usd, usdCompact, fmtDate } from '../lib/format';
 import {
   Badge,
   Button,
@@ -65,6 +66,25 @@ export default function Properties() {
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [groupKey, setGroupKey] = useState('none');
+
+  const navigate = useNavigate();
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const toggleExpand = (id: number) =>
+    setExpanded((s) => {
+      const n = new Set(s);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+
+  // All leases assigned to each property (a property may have many).
+  const leasesByProperty = useMemo(() => {
+    const m = new Map<number, Lease[]>();
+    for (const l of leases) {
+      if (!m.has(l.property_id)) m.set(l.property_id, []);
+      m.get(l.property_id)!.push(l);
+    }
+    return m;
+  }, [leases]);
 
   // Annual rent per property = sum of its active leases' base rent.
   const rentByProperty = useMemo(() => {
@@ -162,42 +182,74 @@ export default function Properties() {
                     </td>
                   </tr>
                 )}
-                {g.rows.map((p) => (
-                  <tr key={p.id} className="border-b border-slate-100 hover:bg-slate-50">
-                    <td className="px-5 py-3 font-medium text-slate-800">{p.name}</td>
-                    <td className="px-5 py-3 text-slate-600">
-                      {p.city}, {p.state}
-                      <div className="text-xs text-slate-400">{p.country}</div>
-                    </td>
-                    <td className="px-5 py-3">
-                      <Badge>{p.property_type}</Badge>
-                    </td>
-                    <td className="px-5 py-3 text-slate-600">{p.ownership}</td>
-                    <td className="px-5 py-3 text-right tabular-nums text-slate-700">
-                      {num(p.rentable_sqft)}
-                    </td>
-                    <td className="px-5 py-3 text-right tabular-nums text-slate-700">
-                      {rentByProperty.get(p.id) ? usdCompact(rentByProperty.get(p.id)!) : '—'}
-                    </td>
-                    <td className="px-5 py-3">
-                      <Badge>{p.status}</Badge>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        className="mr-3 text-xs font-medium text-blue-600 hover:underline"
-                        onClick={() => setEditing(p)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="text-xs font-medium text-rose-600 hover:underline"
-                        onClick={() => remove(p.id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {g.rows.map((p) => {
+                  const plist = leasesByProperty.get(p.id) || [];
+                  const isOpen = expanded.has(p.id);
+                  return (
+                    <Fragment key={p.id}>
+                      <tr className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="px-5 py-3">
+                          <button
+                            onClick={() => toggleExpand(p.id)}
+                            className="flex items-start gap-1.5 text-left"
+                            title={isOpen ? 'Hide leases' : 'Show leases'}
+                          >
+                            <span className="mt-0.5 w-3 text-xs text-slate-400">
+                              {isOpen ? '▾' : '▸'}
+                            </span>
+                            <span>
+                              <span className="font-medium text-slate-800">{p.name}</span>
+                              <span className="block text-xs text-slate-400">
+                                {plist.length} lease{plist.length === 1 ? '' : 's'}
+                              </span>
+                            </span>
+                          </button>
+                        </td>
+                        <td className="px-5 py-3 text-slate-600">
+                          {p.city}, {p.state}
+                          <div className="text-xs text-slate-400">{p.country}</div>
+                        </td>
+                        <td className="px-5 py-3">
+                          <Badge>{p.property_type}</Badge>
+                        </td>
+                        <td className="px-5 py-3 text-slate-600">{p.ownership}</td>
+                        <td className="px-5 py-3 text-right tabular-nums text-slate-700">
+                          {num(p.rentable_sqft)}
+                        </td>
+                        <td className="px-5 py-3 text-right tabular-nums text-slate-700">
+                          {rentByProperty.get(p.id) ? usdCompact(rentByProperty.get(p.id)!) : '—'}
+                        </td>
+                        <td className="px-5 py-3">
+                          <Badge>{p.status}</Badge>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <button
+                            className="mr-3 text-xs font-medium text-blue-600 hover:underline"
+                            onClick={() => setEditing(p)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="text-xs font-medium text-rose-600 hover:underline"
+                            onClick={() => remove(p.id)}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr className="border-b border-slate-100 bg-slate-50/50">
+                          <td colSpan={8} className="px-5 py-3">
+                            <PropertyLeases
+                              leases={plist}
+                              onAdd={() => navigate(`/leases?addForProperty=${p.id}`)}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
                 {groupKey !== 'none' && (
                   <tr className="border-b border-slate-200 bg-slate-50/40 text-slate-600">
                     <td colSpan={4} className="px-5 py-2 text-xs font-medium">
@@ -234,6 +286,57 @@ export default function Properties() {
           onSave={save}
           onClose={() => setEditing(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// Inline list of all leases assigned to a property, with a shortcut to add
+// another. A property can hold any number of leases.
+function PropertyLeases({ leases, onAdd }: { leases: Lease[]; onAdd: () => void }) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Leases on this property ({leases.length})
+        </div>
+        <Button onClick={onAdd}>+ Add lease to this property</Button>
+      </div>
+      {leases.length === 0 ? (
+        <p className="text-sm text-slate-500">
+          No leases assigned yet. Use “Add lease to this property” to create one.
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
+                <th className="px-4 py-2">Lease</th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2 text-right">Sq Ft</th>
+                <th className="px-4 py-2 text-right">Base Rent/yr</th>
+                <th className="px-4 py-2">Expiration</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leases.map((l) => (
+                <tr key={l.id} className="border-b border-slate-100 last:border-0">
+                  <td className="px-4 py-2 font-medium text-slate-800">{l.lease_name}</td>
+                  <td className="px-4 py-2">
+                    <Badge>{l.status}</Badge>
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-700">
+                    {num(l.rentable_sqft || 0)}
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-700">
+                    {l.base_rent_annual ? usdCompact(l.base_rent_annual) : '—'}
+                  </td>
+                  <td className="px-4 py-2 text-slate-600">{fmtDate(l.expiration_date)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Lease, Property, ScheduleRow } from '../lib/types';
 import { usd, usdCompact, num, fmtDate, monthsUntil } from '../lib/format';
@@ -78,6 +78,23 @@ export default function Leases() {
 
   useEffect(() => {
     load();
+  }, []);
+
+  // Deep-link from the Properties page: open a new lease pre-assigned to a property.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const pid = searchParams.get('addForProperty');
+    if (!pid) return;
+    setEditing({
+      status: 'Active',
+      escalation_pct: 3,
+      notice_period_months: 9,
+      property_id: Number(pid),
+    });
+    const next = new URLSearchParams(searchParams);
+    next.delete('addForProperty');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtered = useMemo(() => {
