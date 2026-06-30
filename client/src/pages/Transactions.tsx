@@ -5,6 +5,7 @@ import { usdCompact, num, fmtDate } from '../lib/format';
 import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
 import { SortGroupBar } from '../components/SortGroupBar';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
+import { parseCsv } from '../lib/csv';
 import {
   addTxnAttachment,
   listTxnAttachments,
@@ -138,6 +139,68 @@ const TX_GROUPS: GroupOption<Transaction>[] = [
   { key: 'assigned_to', label: 'Assigned To', get: (t) => t.assigned_to || '—' },
 ];
 
+// --- CSV import: map common/tracker headers to transaction fields ---
+const FIELD_SYNONYMS: Record<string, string> = {
+  name: 'name', transaction: 'name', project: 'name', projecttransactionname: 'name',
+  descriptionofrequirement: 'name', requirement: 'name', deal: 'name', dealname: 'name',
+  type: 'type', transactiontype: 'type',
+  stage: 'stage', workflowstage: 'stage', realestateworkflowstage: 'stage',
+  status: 'progress', progress: 'progress',
+  priority: 'priority',
+  spacetype: 'space_type',
+  assignedto: 'assigned_to', owner: 'assigned_to', assignee: 'assigned_to',
+  dateneededby: 'date_needed_by', needby: 'date_needed_by', neededby: 'date_needed_by',
+  coistatus: 'coi_status', coi: 'coi_status',
+  securitydeposit: 'deposit_status', deposit: 'deposit_status', depositstatus: 'deposit_status',
+  market: 'market', region: 'market', regionbusinessunit: 'market', businessunit: 'market',
+  targetsf: 'target_sqft', sf: 'target_sqft', squarefeet: 'target_sqft', targetsqft: 'target_sqft',
+  estimatedvalue: 'estimated_value', estvalue: 'estimated_value', annualcost: 'estimated_value',
+  estannualcost: 'estimated_value', value: 'estimated_value',
+  probability: 'probability', confidence: 'probability',
+  broker: 'broker', externalbroker: 'broker',
+  lead: 'lead', internallead: 'lead', internalleadrequestor: 'lead',
+  notes: 'notes', comments: 'notes', comment: 'notes',
+  startdate: 'start_date', targetclose: 'target_close_date', targetclosedate: 'target_close_date',
+};
+const NUM_FIELDS = ['target_sqft', 'estimated_value', 'probability'];
+const DATE_FIELDS = ['date_needed_by', 'start_date', 'target_close_date'];
+
+function normHeader(h: string): string {
+  return h.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+function mapHeaders(headers: string[]): string[] {
+  return headers.map((h) => FIELD_SYNONYMS[normHeader(h)] || '');
+}
+function csvNumber(v: string): number {
+  const n = parseFloat(v.replace(/[^0-9.\-]/g, ''));
+  return Number.isNaN(n) ? 0 : n;
+}
+function csvDate(v: string): string {
+  const s = v.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const d = new Date(s);
+  if (!Number.isNaN(+d)) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+      d.getDate(),
+    ).padStart(2, '0')}`;
+  }
+  return s;
+}
+function rowToTxn(row: string[], fields: string[]): Partial<Transaction> {
+  const t: Record<string, unknown> = {};
+  fields.forEach((f, idx) => {
+    if (!f) return;
+    const raw = (row[idx] ?? '').trim();
+    if (raw === '') return;
+    if (NUM_FIELDS.includes(f)) t[f] = csvNumber(raw);
+    else if (DATE_FIELDS.includes(f)) t[f] = csvDate(raw);
+    else t[f] = raw;
+  });
+  if (!t.stage) t.stage = 'To Be Assigned';
+  if (!t.type) t.type = 'New Lease';
+  return t as Partial<Transaction>;
+}
+
 export default function Transactions() {
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -148,6 +211,12 @@ export default function Transactions() {
   const [sortKey, setSortKey] = useState('stage');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [groupKey, setGroupKey] = useState('none');
+  const [importing, setImporting] = useState(false);
+
+  async function importTransactions(rows: Partial<Transaction>[]) {
+    for (const r of rows) await api.createTransaction(r);
+    await load();
+  }
 
   const listGroups = useMemo(() => {
     const sorted = sortRows(txns, TX_SORTS.find((s) => s.key === sortKey), sortDir);
@@ -259,7 +328,7 @@ export default function Transactions() {
 
       {view === 'list' && (
         <div className="flex-1 overflow-y-auto scroll-touch p-4 md:p-6">
-          <div className="mb-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <SortGroupBar
               sortKey={sortKey}
               setSortKey={setSortKey}
@@ -270,6 +339,9 @@ export default function Transactions() {
               sortChoices={TX_SORTS}
               groupChoices={TX_GROUPS}
             />
+            <Button variant="ghost" onClick={() => setImporting(true)}>
+              ⤒ Import CSV
+            </Button>
           </div>
           <Card className="overflow-x-auto scroll-touch">
             <table className="w-full min-w-[900px] text-sm">
@@ -470,7 +542,139 @@ export default function Transactions() {
           onClose={() => setEditing(null)}
         />
       )}
+      {importing && (
+        <CsvImport onClose={() => setImporting(false)} onImport={importTransactions} />
+      )}
     </div>
+  );
+}
+
+function CsvImport({
+  onClose,
+  onImport,
+}: {
+  onClose: () => void;
+  onImport: (rows: Partial<Transaction>[]) => Promise<void>;
+}) {
+  const [parsed, setParsed] = useState<{
+    txns: Partial<Transaction>[];
+    headers: string[];
+    fields: string[];
+  } | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState('');
+
+  async function onFile(file: File) {
+    setError('');
+    setParsed(null);
+    try {
+      const rows = parseCsv(await file.text());
+      if (rows.length < 2) {
+        setError('That file has a header but no data rows.');
+        return;
+      }
+      const headers = rows[0];
+      const fields = mapHeaders(headers);
+      if (!fields.includes('name')) {
+        setError(
+          'No name column found. Include a header like "Name", "Transaction", or ' +
+            '"Description of Requirement".',
+        );
+        return;
+      }
+      const txns = rows
+        .slice(1)
+        .map((r) => rowToTxn(r, fields))
+        .filter((t) => String(t.name || '').trim() !== '');
+      setParsed({ txns, headers, fields });
+    } catch {
+      setError('Could not read that file. Make sure it is a .csv export.');
+    }
+  }
+
+  async function run() {
+    if (!parsed) return;
+    setBusy(`Importing ${parsed.txns.length}…`);
+    try {
+      await onImport(parsed.txns);
+      onClose();
+    } catch (e) {
+      setError('Import failed: ' + (e instanceof Error ? e.message : 'unknown error'));
+    } finally {
+      setBusy('');
+    }
+  }
+
+  const ignored = parsed ? parsed.headers.filter((_, i) => !parsed.fields[i]) : [];
+
+  return (
+    <Modal title="Import Transactions from CSV" onClose={onClose}>
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600">
+          Upload a CSV (e.g. exported from your tracker). The first row must be column headers.
+          Recognized columns include Name/Description, Type, Stage, Status, Priority, Space Type,
+          Assigned To, Date Needed By, COI Status, Security Deposit, Market, Target SF, and Notes.
+        </p>
+        <input
+          type="file"
+          accept=".csv,text/csv"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onFile(f);
+          }}
+          className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+        />
+
+        {error && (
+          <div className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>
+        )}
+
+        {parsed && (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-slate-50 p-3 text-sm">
+              <div className="font-medium text-slate-800">
+                Found {parsed.txns.length} transaction{parsed.txns.length === 1 ? '' : 's'}.
+              </div>
+              {ignored.length > 0 && (
+                <div className="mt-1 text-xs text-slate-500">
+                  Ignored columns: {ignored.join(', ')}
+                </div>
+              )}
+            </div>
+            <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-3 py-1.5 text-left">Name</th>
+                    <th className="px-3 py-1.5 text-left">Stage</th>
+                    <th className="px-3 py-1.5 text-left">Priority</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsed.txns.slice(0, 50).map((t, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="px-3 py-1.5 text-slate-700">{t.name}</td>
+                      <td className="px-3 py-1.5 text-slate-500">{t.stage}</td>
+                      <td className="px-3 py-1.5 text-slate-500">{t.priority || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2">
+          {busy && <span className="text-sm text-slate-500">{busy}</span>}
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={run} disabled={!parsed || !!busy || parsed.txns.length === 0}>
+            {parsed ? `Import ${parsed.txns.length}` : 'Import'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
