@@ -12,6 +12,9 @@ export interface GroupOption<T> {
   key: string;
   label: string;
   get: (row: T) => string;
+  // Optional explicit ordering of group buckets (e.g. workflow stages); buckets
+  // not listed fall back to alphabetical after the listed ones.
+  order?: string[];
 }
 
 export interface Group<T> {
@@ -45,6 +48,13 @@ export function groupRows<T>(rows: T[], opt: GroupOption<T> | undefined): Group<
     .sort((a, b) => {
       if (a.key === '—') return 1;
       if (b.key === '—') return -1;
+      if (opt.order) {
+        const ia = opt.order.indexOf(a.key);
+        const ib = opt.order.indexOf(b.key);
+        const ra = ia === -1 ? Number.MAX_SAFE_INTEGER : ia;
+        const rb = ib === -1 ? Number.MAX_SAFE_INTEGER : ib;
+        if (ra !== rb) return ra - rb;
+      }
       return a.key.localeCompare(b.key, undefined, { numeric: true });
     });
 }

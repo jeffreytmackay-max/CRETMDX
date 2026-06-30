@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api } from '../lib/api';
 import type { Property, Transaction } from '../lib/types';
 import { usdCompact, num, fmtDate } from '../lib/format';
-import { Button, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
+import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
+import { SortGroupBar } from '../components/SortGroupBar';
+import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 import {
   addTxnAttachment,
   listTxnAttachments,
@@ -113,6 +115,28 @@ const PRIORITY_BADGE: Record<string, string> = {
   Medium: 'bg-amber-100 text-amber-700',
   Low: 'bg-slate-100 text-slate-600',
 };
+const PRIORITY_RANK: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
+
+const TX_SORTS: SortOption<Transaction>[] = [
+  { key: 'stage', label: 'Stage', get: (t) => STAGES.indexOf(t.stage) },
+  { key: 'name', label: 'Name', get: (t) => t.name || '' },
+  { key: 'type', label: 'Type', get: (t) => t.type || '' },
+  { key: 'priority', label: 'Priority', get: (t) => PRIORITY_RANK[t.priority || ''] ?? 99 },
+  { key: 'progress', label: 'Status', get: (t) => t.progress || '' },
+  { key: 'space_type', label: 'Space Type', get: (t) => t.space_type || '' },
+  { key: 'assigned_to', label: 'Assigned To', get: (t) => t.assigned_to || '' },
+  { key: 'date_needed_by', label: 'Date Needed', get: (t) => t.date_needed_by || '' },
+  { key: 'estimated_value', label: 'Annual Cost', get: (t) => t.estimated_value || 0 },
+];
+const TX_GROUPS: GroupOption<Transaction>[] = [
+  { key: 'none', label: 'None', get: () => '' },
+  { key: 'stage', label: 'Stage', get: (t) => t.stage || '—', order: STAGES },
+  { key: 'type', label: 'Type', get: (t) => t.type || '—', order: TYPES },
+  { key: 'priority', label: 'Priority', get: (t) => t.priority || '—', order: PRIORITIES },
+  { key: 'progress', label: 'Status', get: (t) => t.progress || '—', order: PROGRESS },
+  { key: 'space_type', label: 'Space Type', get: (t) => t.space_type || '—', order: SPACE_TYPES },
+  { key: 'assigned_to', label: 'Assigned To', get: (t) => t.assigned_to || '—' },
+];
 
 export default function Transactions() {
   const [txns, setTxns] = useState<Transaction[]>([]);
@@ -120,6 +144,16 @@ export default function Transactions() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Transaction> | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
+  const [view, setView] = useState<'board' | 'list'>('board');
+  const [sortKey, setSortKey] = useState('stage');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [groupKey, setGroupKey] = useState('none');
+
+  const listGroups = useMemo(() => {
+    const sorted = sortRows(txns, TX_SORTS.find((s) => s.key === sortKey), sortDir);
+    const groupOpt = groupKey === 'none' ? undefined : TX_GROUPS.find((g) => g.key === groupKey);
+    return groupRows(sorted, groupOpt);
+  }, [txns, sortKey, sortDir, groupKey]);
 
   const load = async () => {
     const [tRaw, p] = await Promise.all([api.transactions(), api.properties()]);
@@ -193,21 +227,143 @@ export default function Transactions() {
             {usdCompact(totals.annualCost)} est. annual cost
           </p>
         </div>
-        <Button
-          onClick={() =>
-            setEditing({
-              stage: 'To Be Assigned',
-              type: 'New Lease',
-              probability: 50,
-              priority: 'Medium',
-              progress: 'Planning',
-            })
-          }
-        >
-          + Add Transaction
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-full bg-slate-100 p-0.5 text-xs font-medium">
+            {(['board', 'list'] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`rounded-full px-3 py-1.5 capitalize transition ${
+                  view === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          <Button
+            onClick={() =>
+              setEditing({
+                stage: 'To Be Assigned',
+                type: 'New Lease',
+                probability: 50,
+                priority: 'Medium',
+                progress: 'Planning',
+              })
+            }
+          >
+            + Add Transaction
+          </Button>
+        </div>
       </div>
 
+      {view === 'list' && (
+        <div className="flex-1 overflow-y-auto scroll-touch p-4 md:p-6">
+          <div className="mb-4">
+            <SortGroupBar
+              sortKey={sortKey}
+              setSortKey={setSortKey}
+              sortDir={sortDir}
+              setSortDir={setSortDir}
+              groupKey={groupKey}
+              setGroupKey={setGroupKey}
+              sortChoices={TX_SORTS}
+              groupChoices={TX_GROUPS}
+            />
+          </div>
+          <Card className="overflow-x-auto scroll-touch">
+            <table className="w-full min-w-[900px] text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-4 py-3">Transaction</th>
+                  <th className="px-4 py-3">Type</th>
+                  <th className="px-4 py-3">Stage</th>
+                  <th className="px-4 py-3">Priority</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Assigned To</th>
+                  <th className="px-4 py-3">Need By</th>
+                  <th className="px-4 py-3 text-right">Annual Cost</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {listGroups.map((g) => (
+                  <Fragment key={g.key || 'all'}>
+                    {groupKey !== 'none' && (
+                      <tr className="bg-slate-50/70">
+                        <td
+                          colSpan={9}
+                          className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
+                        >
+                          {g.key} <span className="text-slate-400">· {g.rows.length}</span>
+                        </td>
+                      </tr>
+                    )}
+                    {g.rows.map((t) => (
+                      <tr key={t.id} className="border-b border-slate-100 hover:bg-slate-50">
+                        <td className="px-4 py-3">
+                          <button
+                            className="text-left font-medium text-slate-800 hover:text-blue-600 hover:underline"
+                            onClick={() => setEditing(t)}
+                          >
+                            {t.name}
+                          </button>
+                          <div className="text-xs text-slate-400">
+                            {[t.space_type, t.market].filter(Boolean).join(' · ')}
+                            {parseLinks(t.links).length > 0 && ` · 🔗 ${parseLinks(t.links).length}`}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">{t.type}</td>
+                        <td className="px-4 py-3 text-slate-600">{t.stage}</td>
+                        <td className="px-4 py-3">
+                          {t.priority && (
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                PRIORITY_BADGE[t.priority] || 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {t.priority}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">{t.progress || '—'}</td>
+                        <td className="px-4 py-3 text-slate-600">{t.assigned_to || '—'}</td>
+                        <td className="px-4 py-3 text-slate-600">{fmtDate(t.date_needed_by)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                          {t.estimated_value ? usdCompact(t.estimated_value) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <button
+                            className="mr-3 text-xs font-medium text-blue-600 hover:underline"
+                            onClick={() => setEditing(t)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="text-xs font-medium text-rose-600 hover:underline"
+                            onClick={() => remove(t.id)}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+                {txns.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-400">
+                      No transactions yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      )}
+
+      {view === 'board' && (
       <div className="flex flex-1 gap-4 overflow-x-auto scroll-touch p-4 md:p-6">
         {STAGES.map((stage) => {
           const items = byStage[stage] || [];
@@ -304,6 +460,7 @@ export default function Transactions() {
           );
         })}
       </div>
+      )}
 
       {editing && (
         <TxForm
