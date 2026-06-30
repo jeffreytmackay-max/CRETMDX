@@ -105,20 +105,24 @@ export default function Leases() {
     return groupRows(sorted, groupOpt);
   }, [filtered, sortKey, sortDir, groupKey]);
 
-  // Keep each property's Rentable SF in sync with the leases assigned to it:
-  // set it to the total square footage of that property's leases. Runs after any
-  // lease add/edit/reassign/delete so the portfolio reflects leased area.
+  // Fill a property's Rentable SF from its leases ONLY when the property has no
+  // SqFt yet (blank/zero). This auto-populates empty portfolio records from lease
+  // data without ever overwriting a value entered manually. Runs after any lease
+  // add/edit/reassign/delete.
   async function syncPropertiesSqft(ids: (number | null | undefined)[]) {
     const unique = [
       ...new Set(ids.filter((x): x is number => typeof x === 'number' && Number.isFinite(x))),
     ];
     if (unique.length === 0) return;
-    const all = await api.leases();
+    const [allLeases, allProps] = await Promise.all([api.leases(), api.properties()]);
+    const propById = new Map(allProps.map((p) => [p.id, p]));
     for (const pid of unique) {
-      const total = all
+      const prop = propById.get(pid);
+      if (!prop || (prop.rentable_sqft || 0) > 0) continue; // keep manually-set values
+      const total = allLeases
         .filter((l) => l.property_id === pid)
         .reduce((s, l) => s + (l.rentable_sqft || 0), 0);
-      await api.updateProperty(pid, { rentable_sqft: total });
+      if (total > 0) await api.updateProperty(pid, { rentable_sqft: total });
     }
   }
 
