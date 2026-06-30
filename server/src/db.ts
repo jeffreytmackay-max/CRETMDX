@@ -84,6 +84,13 @@ export function initSchema(): void {
       target_close_date TEXT,
       notes TEXT,
       links TEXT,
+      space_type TEXT,
+      progress TEXT,
+      date_needed_by TEXT,
+      priority TEXT,
+      assigned_to TEXT,
+      coi_status TEXT,
+      deposit_status TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );
 

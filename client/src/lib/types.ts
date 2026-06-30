@@ -68,7 +68,15 @@ export interface Transaction {
   start_date: string;
   target_close_date: string;
   notes?: string;
-  links?: string; // one URL per line
+  links?: string; // JSON array of { name, url }
+  // Internal CRE tracker fields
+  space_type?: string; // e.g. NOP, Office, Lab
+  progress?: string; // Planning / In Progress / Complete
+  date_needed_by?: string;
+  priority?: string; // Low / Medium / High
+  assigned_to?: string;
+  coi_status?: string; // Certificate of Insurance status
+  deposit_status?: string; // Security deposit workflow status
 }
 
 export interface DashboardData {

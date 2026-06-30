@@ -76,10 +76,24 @@ create table if not exists public.transactions (
   target_close_date text,
   notes             text,
   links             text,
+  space_type        text,
+  progress          text,
+  date_needed_by    text,
+  priority          text,
+  assigned_to       text,
+  coi_status        text,
+  deposit_status    text,
   created_at        timestamptz default now()
 );
--- For projects created before the links column existed:
+-- For projects created before these columns existed:
 alter table public.transactions add column if not exists links text;
+alter table public.transactions add column if not exists space_type text;
+alter table public.transactions add column if not exists progress text;
+alter table public.transactions add column if not exists date_needed_by text;
+alter table public.transactions add column if not exists priority text;
+alter table public.transactions add column if not exists assigned_to text;
+alter table public.transactions add column if not exists coi_status text;
+alter table public.transactions add column if not exists deposit_status text;
 
 create index if not exists leases_property_id_idx on public.leases(property_id);
 create index if not exists transactions_property_id_idx on public.transactions(property_id);

@@ -75,9 +75,15 @@ function linkHref(url: string): string {
   return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
-// Internal corporate real estate (occupier) lifecycle — from an internal request
-// through approval and execution, rather than a brokerage sales pipeline.
-const STAGES = ['Requested', 'Evaluating', 'Negotiating', 'Pending Approval', 'Executing', 'Completed'];
+// Internal corporate real estate (occupier) workflow, matching the lease-tracker
+// the team uses: from intake through site search, legal terms, execution, done.
+const STAGES = [
+  'To Be Assigned',
+  'Site Search',
+  'Negotiating Legal Terms',
+  'Lease Execution',
+  'Completed',
+];
 const TYPES = [
   'New Lease',
   'Renewal',
@@ -89,14 +95,23 @@ const TYPES = [
   'Acquisition',
   'Build-to-Suit',
 ];
+const SPACE_TYPES = ['NOP', 'Office', 'Lab', 'Aviation', 'Multi-Use', 'Other'];
+const PRIORITIES = ['High', 'Medium', 'Low'];
+const PROGRESS = ['Planning', 'In Progress', 'Complete'];
+const COI_STATUSES = ['Not Started', 'Sent to Landlord', 'Received', 'N/A'];
 
 const STAGE_ACCENT: Record<string, string> = {
-  Requested: 'border-t-slate-400',
-  Evaluating: 'border-t-[#c45957]',
-  Negotiating: 'border-t-[#ff7f41]',
-  'Pending Approval': 'border-t-amber-400',
-  Executing: 'border-t-emerald-400',
+  'To Be Assigned': 'border-t-slate-400',
+  'Site Search': 'border-t-[#c45957]',
+  'Negotiating Legal Terms': 'border-t-[#ff7f41]',
+  'Lease Execution': 'border-t-amber-400',
   Completed: 'border-t-emerald-600',
+};
+
+const PRIORITY_BADGE: Record<string, string> = {
+  High: 'bg-rose-100 text-rose-700',
+  Medium: 'bg-amber-100 text-amber-700',
+  Low: 'bg-slate-100 text-slate-600',
 };
 
 export default function Transactions() {
@@ -178,7 +193,17 @@ export default function Transactions() {
             {usdCompact(totals.annualCost)} est. annual cost
           </p>
         </div>
-        <Button onClick={() => setEditing({ stage: 'Requested', type: 'New Lease', probability: 50 })}>
+        <Button
+          onClick={() =>
+            setEditing({
+              stage: 'To Be Assigned',
+              type: 'New Lease',
+              probability: 50,
+              priority: 'Medium',
+              progress: 'Planning',
+            })
+          }
+        >
           + Add Transaction
         </Button>
       </div>
@@ -230,9 +255,7 @@ export default function Transactions() {
                       </button>
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
-                      <span>
-                        {t.type} · {t.market}
-                      </span>
+                      <span>{[t.type, t.space_type].filter(Boolean).join(' · ')}</span>
                       {parseLinks(t.links).length > 0 && (
                         <span title={`${parseLinks(t.links).length} link(s)`}>
                           🔗 {parseLinks(t.links).length}
@@ -240,17 +263,34 @@ export default function Transactions() {
                       )}
                       {t.notes && <span title="Has notes">📝</span>}
                     </div>
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-sm font-semibold text-slate-700">
-                        {usdCompact(t.estimated_value)}
-                      </span>
-                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
-                        {t.probability}%
-                      </span>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {t.priority && (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                            PRIORITY_BADGE[t.priority] || 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {t.priority}
+                        </span>
+                      )}
+                      {t.progress && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                          {t.progress}
+                        </span>
+                      )}
+                      {t.estimated_value > 0 && (
+                        <span className="ml-auto text-sm font-semibold text-slate-700">
+                          {usdCompact(t.estimated_value)}
+                        </span>
+                      )}
                     </div>
                     <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-                      <span>{num(t.target_sqft)} sf</span>
-                      <span>{fmtDate(t.target_close_date)}</span>
+                      <span>{t.assigned_to || (t.target_sqft ? `${num(t.target_sqft)} sf` : '')}</span>
+                      <span>
+                        {t.date_needed_by
+                          ? `Need by ${fmtDate(t.date_needed_by)}`
+                          : fmtDate(t.target_close_date)}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -325,12 +365,67 @@ function TxForm({
               ))}
             </Select>
           </Field>
-          <Field label="Stage">
+          <Field label="Workflow Stage">
             <Select value={form.stage} onChange={(e) => set('stage', e.target.value)}>
               {STAGES.map((s) => (
                 <option key={s}>{s}</option>
               ))}
             </Select>
+          </Field>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Space Type">
+            <Select value={form.space_type || ''} onChange={(e) => set('space_type', e.target.value)}>
+              <option value="">—</option>
+              {SPACE_TYPES.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Priority">
+            <Select value={form.priority || ''} onChange={(e) => set('priority', e.target.value)}>
+              <option value="">—</option>
+              {PRIORITIES.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Status">
+            <Select value={form.progress || ''} onChange={(e) => set('progress', e.target.value)}>
+              <option value="">—</option>
+              {PROGRESS.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Date Needed By">
+            <Input
+              type="date"
+              value={form.date_needed_by || ''}
+              onChange={(e) => set('date_needed_by', e.target.value)}
+            />
+          </Field>
+          <Field label="Assigned To">
+            <Input value={form.assigned_to || ''} onChange={(e) => set('assigned_to', e.target.value)} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="COI Status">
+            <Select value={form.coi_status || ''} onChange={(e) => set('coi_status', e.target.value)}>
+              <option value="">—</option>
+              {COI_STATUSES.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Security Deposit">
+            <Input
+              value={form.deposit_status || ''}
+              onChange={(e) => set('deposit_status', e.target.value)}
+              placeholder="e.g. Deposit Sent to LL"
+            />
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
