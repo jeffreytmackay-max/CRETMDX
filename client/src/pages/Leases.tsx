@@ -105,11 +105,31 @@ export default function Leases() {
     return groupRows(sorted, groupOpt);
   }, [filtered, sortKey, sortDir, groupKey]);
 
+  // Keep each property's Rentable SF in sync with the leases assigned to it:
+  // set it to the total square footage of that property's leases. Runs after any
+  // lease add/edit/reassign/delete so the portfolio reflects leased area.
+  async function syncPropertiesSqft(ids: (number | null | undefined)[]) {
+    const unique = [
+      ...new Set(ids.filter((x): x is number => typeof x === 'number' && Number.isFinite(x))),
+    ];
+    if (unique.length === 0) return;
+    const all = await api.leases();
+    for (const pid of unique) {
+      const total = all
+        .filter((l) => l.property_id === pid)
+        .reduce((s, l) => s + (l.rentable_sqft || 0), 0);
+      await api.updateProperty(pid, { rentable_sqft: total });
+    }
+  }
+
   async function save(form: Partial<Lease>, file?: File | null) {
+    // The property the lease was previously on (if reassigned) also needs a resync.
+    const prevPropertyId = form.id ? editing?.property_id : undefined;
     let id = form.id;
     if (id) await api.updateLease(id, form);
     else id = (await api.createLease(form)).id;
     if (file && id) await savePdf(id, file);
+    await syncPropertiesSqft([form.property_id, prevPropertyId]);
     setEditing(null);
     setEditingFile(null);
     load();
@@ -119,13 +139,16 @@ export default function Leases() {
       const created = await api.createLease(lease);
       if (created?.id) await savePdf(created.id, file);
     }
+    await syncPropertiesSqft(items.map((it) => it.lease.property_id));
     setBatch(null);
     load();
   }
   async function remove(id: number) {
     if (!confirm('Delete this lease?')) return;
+    const pid = leases.find((l) => l.id === id)?.property_id;
     await api.deleteLease(id);
     await deletePdf(id);
+    await syncPropertiesSqft([pid]);
     load();
   }
 
