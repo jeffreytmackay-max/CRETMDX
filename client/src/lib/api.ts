@@ -7,7 +7,7 @@ import type {
   ComparisonResult,
 } from './types';
 import { store, leaseTermYears, resetData, dashboardFrom } from './store';
-import { buildLeaseCashflows, compareLeaseVsBuy } from './finance';
+import { buildLeaseCashflows, compareLeaseVsBuy, effectiveFreeMonths } from './finance';
 import { isSupabaseConfigured } from './supabase';
 import * as cloud from './cloud';
 
@@ -26,7 +26,11 @@ function scheduleFor(lease: Lease): { lease: Lease; termYears: number; schedule:
     baseRentAnnual: lease.base_rent_annual || 0,
     escalationPct: lease.escalation_pct || 0,
     opexPsf: lease.opex_psf || 0,
-    freeRentMonths: lease.free_rent_months || 0,
+    freeRentMonths: effectiveFreeMonths(
+      lease.commencement_date,
+      lease.rent_start_date,
+      lease.free_rent_months || 0,
+    ),
     tiAllowancePsf: lease.ti_allowance_psf || 0,
     termYears: Math.max(1, termYears),
     discountRate: 0.08,

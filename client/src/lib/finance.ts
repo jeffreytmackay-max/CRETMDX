@@ -30,6 +30,27 @@ export interface YearCashflow {
   netCost: number;
 }
 
+// The effective "no rent" period at the start of a lease, in months: the greater
+// of the stated free-rent months and the gap between the lease commencement and
+// an explicit rent-commencement (rent start) date. Ensures projections don't show
+// rent before it actually starts.
+export function effectiveFreeMonths(
+  commencementISO?: string,
+  rentStartISO?: string,
+  freeMonths = 0,
+): number {
+  let eff = freeMonths || 0;
+  if (commencementISO && rentStartISO) {
+    const c = new Date(commencementISO);
+    const r = new Date(rentStartISO);
+    if (!Number.isNaN(+c) && !Number.isNaN(+r) && r > c) {
+      const gap = (r.getFullYear() - c.getFullYear()) * 12 + (r.getMonth() - c.getMonth());
+      eff = Math.max(eff, gap);
+    }
+  }
+  return eff;
+}
+
 export function buildLeaseCashflows(i: LeaseInputs): YearCashflow[] {
   const rows: YearCashflow[] = [];
   for (let y = 1; y <= i.termYears; y++) {

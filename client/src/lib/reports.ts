@@ -1,5 +1,5 @@
 import type { Property, Lease, Transaction } from './types';
-import { buildLeaseCashflows } from './finance';
+import { buildLeaseCashflows, effectiveFreeMonths } from './finance';
 
 // Pure report builders + CSV export helpers. All computed client-side from the
 // browser store so reports work offline and on the static site.
@@ -94,7 +94,11 @@ export function futureObligations(leases: Lease[], years = 10): ObligationRow[] 
       baseRentAnnual: l.base_rent_annual || 0,
       escalationPct: l.escalation_pct || 0,
       opexPsf: 0,
-      freeRentMonths: l.free_rent_months || 0,
+      freeRentMonths: effectiveFreeMonths(
+        l.commencement_date,
+        l.rent_start_date,
+        l.free_rent_months || 0,
+      ),
       tiAllowancePsf: 0,
       termYears,
       discountRate: 0,
