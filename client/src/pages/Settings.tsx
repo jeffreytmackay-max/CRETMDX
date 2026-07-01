@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getApiKey, setApiKey } from '../lib/ai';
 import { resetData, clearData, exportData, importData } from '../lib/store';
 import { clearAllPdfs, exportAllPdfs, importPdfs } from '../lib/pdfStore';
-import { Button, Card, Field, Input, SectionTitle } from '../components/ui';
+import { Button, Card, Field, Input, Select, SectionTitle } from '../components/ui';
+import type { FieldDef, FieldEntity, FieldType } from '../lib/types';
+import { getFieldDefs, addFieldDef, removeFieldDef, slugify } from '../lib/fields';
 import {
   getSupabaseConfig,
   setSupabaseConfig,
@@ -140,6 +142,10 @@ export default function Settings() {
           <BackendCard />
         </div>
 
+        <div className="lg:col-span-2">
+          <CustomFieldsCard />
+        </div>
+
         <Card className="p-5">
           <SectionTitle>Anthropic API Key</SectionTitle>
           <p className="mb-4 text-sm text-slate-600">
@@ -261,6 +267,183 @@ export default function Settings() {
       </div>
     </div>
   );
+}
+
+// Manage user-defined ("custom") fields per record type. Fields added here show
+// up automatically on the matching add/edit forms, with values saved alongside
+// the record (in its `custom` JSON map) and synced to the cloud when connected.
+const ENTITIES: { key: FieldEntity; label: string }[] = [
+  { key: 'property', label: 'Properties' },
+  { key: 'lease', label: 'Leases' },
+  { key: 'transaction', label: 'Transactions' },
+];
+const FIELD_TYPES: { key: FieldType; label: string }[] = [
+  { key: 'text', label: 'Text' },
+  { key: 'number', label: 'Number' },
+  { key: 'date', label: 'Date' },
+  { key: 'select', label: 'Dropdown (choices)' },
+  { key: 'checkbox', label: 'Checkbox (yes/no)' },
+];
+
+function CustomFieldsCard() {
+  const [entity, setEntity] = useState<FieldEntity>('property');
+  const [defs, setDefs] = useState<FieldDef[]>([]);
+  const [label, setLabel] = useState('');
+  const [type, setType] = useState<FieldType>('text');
+  const [options, setOptions] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  async function reload(e: FieldEntity) {
+    setDefs(await getFieldDefs(e));
+  }
+
+  useEffect(() => {
+    reload(entity);
+  }, [entity]);
+
+  async function add() {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setErr('');
+    try {
+      const key = slugify(trimmed);
+      if (defs.some((d) => d.field_key === key)) {
+        setErr('A field with a similar name already exists for this record type.');
+        return;
+      }
+      await addFieldDef({
+        entity,
+        field_key: key,
+        label: trimmed,
+        field_type: type,
+        options: type === 'select' ? options.trim() : undefined,
+        sort_order: defs.length,
+      });
+      setLabel('');
+      setOptions('');
+      setType('text');
+      await reload(entity);
+    } catch (e) {
+      setErr('Could not add the field: ' + (e instanceof Error ? e.message : 'unknown error'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(d: FieldDef) {
+    if (!d.id) return;
+    if (!confirm(`Remove the "${d.label}" field? Existing saved values stay in each record but the field is hidden.`))
+      return;
+    await removeFieldDef(d.id);
+    await reload(entity);
+  }
+
+  return (
+    <Card className="p-5">
+      <SectionTitle>Custom Fields</SectionTitle>
+      <p className="mb-4 text-sm text-slate-600">
+        Add your own fields to Properties, Leases, or Transactions — they appear automatically on the
+        add/edit forms and are saved with each record (and synced to the cloud when connected). Remove
+        a field any time; previously saved values are simply hidden.
+      </p>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        {ENTITIES.map((e) => (
+          <button
+            key={e.key}
+            onClick={() => setEntity(e.key)}
+            className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+              entity === e.key
+                ? 'bg-blue-600 text-white'
+                : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+            }`}
+          >
+            {e.label}
+          </button>
+        ))}
+      </div>
+
+      {defs.length === 0 ? (
+        <p className="mb-4 text-sm text-slate-500">No custom fields yet for {entityLabel(entity)}.</p>
+      ) : (
+        <div className="mb-4 overflow-hidden rounded-lg border border-slate-200">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-400">
+                <th className="px-3 py-2">Field</th>
+                <th className="px-3 py-2">Type</th>
+                <th className="px-3 py-2">Choices</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {defs.map((d) => (
+                <tr key={d.id} className="border-b border-slate-100 last:border-0">
+                  <td className="px-3 py-2 font-medium text-slate-800">{d.label}</td>
+                  <td className="px-3 py-2 text-slate-600">
+                    {FIELD_TYPES.find((t) => t.key === d.field_type)?.label || d.field_type}
+                  </td>
+                  <td className="px-3 py-2 text-slate-500">{d.options || '—'}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button
+                      onClick={() => remove(d)}
+                      className="text-xs font-medium text-rose-600 hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="rounded-lg bg-slate-50 p-4">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          Add a field to {entityLabel(entity)}
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <Field label="Field name">
+            <Input
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="e.g. Landlord Contact"
+            />
+          </Field>
+          <Field label="Type">
+            <Select value={type} onChange={(e) => setType(e.target.value as FieldType)}>
+              {FIELD_TYPES.map((t) => (
+                <option key={t.key} value={t.key}>
+                  {t.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Choices (comma-separated)">
+            <Input
+              value={options}
+              onChange={(e) => setOptions(e.target.value)}
+              placeholder="Only for Dropdown"
+              disabled={type !== 'select'}
+            />
+          </Field>
+        </div>
+        <div className="mt-3 flex items-center gap-3">
+          <Button onClick={add} disabled={busy || !label.trim()}>
+            + Add field
+          </Button>
+          {err && <span className="text-sm font-medium text-rose-600">{err}</span>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function entityLabel(e: FieldEntity): string {
+  return ENTITIES.find((x) => x.key === e)?.label || e;
 }
 
 // Connect/disconnect the Supabase cloud backend and migrate local data up to it.

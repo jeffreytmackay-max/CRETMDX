@@ -26,6 +26,7 @@ import {
   Textarea,
 } from '../components/ui';
 import { SortGroupBar } from '../components/SortGroupBar';
+import CustomFields, { CustomFieldsView } from '../components/CustomFields';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 
 type Filter = 'all' | 'expiring' | 'active';
@@ -859,6 +860,10 @@ function LeaseDetail({
         </div>
       )}
 
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+        <CustomFieldsView entity="lease" value={lease.custom} />
+      </dl>
+
       {transactions.length > 0 && (
         <div className="mt-4">
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -1089,6 +1094,9 @@ function LeaseForm({
             placeholder="Summary, translated clauses, or any notes…"
           />
         </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <CustomFields entity="lease" value={form.custom} onChange={(c) => set('custom', c)} />
+        </div>
         <Field label="Original PDF (optional)">
           <input
             type="file"

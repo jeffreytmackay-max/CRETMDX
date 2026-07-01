@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import type { Property, Lease, Transaction } from '../lib/types';
 import { usdCompact, num, fmtDate } from '../lib/format';
 import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
+import CustomFields from '../components/CustomFields';
 import { SortGroupBar } from '../components/SortGroupBar';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 import { parseCsv } from '../lib/csv';
@@ -953,6 +954,10 @@ function TxForm({
             placeholder="Context, next steps, key terms…"
           />
         </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <CustomFields entity="transaction" value={form.custom} onChange={(c) => set('custom', c)} />
+        </div>
 
         <Field label="Links">
           <div className="space-y-2">

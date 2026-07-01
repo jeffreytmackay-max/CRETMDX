@@ -1,4 +1,4 @@
-import type { Property, Lease, Transaction } from './types';
+import type { Property, Lease, Transaction, FieldDef, FieldEntity } from './types';
 import { getSupabase } from './supabase';
 
 // Supabase-backed data layer. Mirrors the shape the `api` module needs, but
@@ -9,6 +9,7 @@ import { getSupabase } from './supabase';
 const PROPERTY_COLS = [
   'name', 'address', 'city', 'state', 'zip', 'country', 'lat', 'lng',
   'property_type', 'rentable_sqft', 'status', 'ownership', 'agile_office', 'notes',
+  'custom',
 ] as const;
 
 const LEASE_COLS = [
@@ -18,7 +19,7 @@ const LEASE_COLS = [
   'security_deposit', 'renewal_options', 'notice_period_months', 'status',
   'execution_date', 'rent_start_date', 'duration_months', 'usable_sqft',
   'loss_factor', 'building_type', 'property_use', 'lead_broker', 'rent_calc_type',
-  'currency', 'parking_spaces', 'parking_rate_monthly', 'notes',
+  'currency', 'parking_spaces', 'parking_rate_monthly', 'notes', 'custom',
 ] as const;
 
 const TRANSACTION_COLS = [
@@ -26,7 +27,7 @@ const TRANSACTION_COLS = [
   'estimated_value', 'probability', 'broker', 'lead', 'start_date',
   'target_close_date', 'notes', 'links',
   'space_type', 'progress', 'date_needed_by', 'priority', 'assigned_to',
-  'coi_status', 'deposit_status',
+  'coi_status', 'deposit_status', 'custom',
 ] as const;
 
 function pick<T extends object>(obj: Partial<T>, cols: readonly string[]): Record<string, unknown> {
@@ -60,21 +61,12 @@ export async function getProperty(id: number): Promise<Property | undefined> {
 }
 
 export async function createProperty(body: Partial<Property>): Promise<Property> {
-  const { data, error } = await sb()
-    .from('properties')
-    .insert(pick(body, PROPERTY_COLS))
-    .select()
-    .single();
+  const { data, error } = await insertRow('properties', pick(body, PROPERTY_COLS));
   return check(data, error) as Property;
 }
 
 export async function updateProperty(id: number, body: Partial<Property>): Promise<Property> {
-  const { data, error } = await sb()
-    .from('properties')
-    .update(pick(body, PROPERTY_COLS))
-    .eq('id', id)
-    .select()
-    .single();
+  const { data, error } = await updateRow('properties', id, pick(body, PROPERTY_COLS));
   return check(data, error) as Property;
 }
 
@@ -107,17 +99,12 @@ export async function getLease(id: number): Promise<Lease | undefined> {
 }
 
 export async function createLease(body: Partial<Lease>): Promise<Lease> {
-  const { data, error } = await sb().from('leases').insert(pick(body, LEASE_COLS)).select().single();
+  const { data, error } = await insertRow('leases', pick(body, LEASE_COLS));
   return check(data, error) as Lease;
 }
 
 export async function updateLease(id: number, body: Partial<Lease>): Promise<Lease> {
-  const { data, error } = await sb()
-    .from('leases')
-    .update(pick(body, LEASE_COLS))
-    .eq('id', id)
-    .select()
-    .single();
+  const { data, error } = await updateRow('leases', id, pick(body, LEASE_COLS));
   return check(data, error) as Lease;
 }
 
@@ -181,6 +168,27 @@ export async function deleteTransaction(id: number): Promise<void> {
 
 async function listLeasesRaw(): Promise<Lease[]> {
   return rawLeases();
+}
+
+// ---- Custom field definitions ----
+export async function listFieldDefs(entity: FieldEntity): Promise<FieldDef[]> {
+  const { data, error } = await sb()
+    .from('field_defs')
+    .select('*')
+    .eq('entity', entity)
+    .order('sort_order', { ascending: true })
+    .order('id', { ascending: true });
+  return check(data, error) as FieldDef[];
+}
+
+export async function createFieldDef(body: FieldDef): Promise<FieldDef> {
+  const { data, error } = await sb().from('field_defs').insert(body).select().single();
+  return check(data, error) as FieldDef;
+}
+
+export async function deleteFieldDef(id: number): Promise<void> {
+  const { error } = await sb().from('field_defs').delete().eq('id', id);
+  if (error) throw new Error(error.message);
 }
 
 // Full snapshot of the cloud portfolio (raw rows), for download/backup.

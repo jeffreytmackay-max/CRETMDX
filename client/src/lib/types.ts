@@ -14,6 +14,20 @@ export interface Property {
   ownership: string;
   agile_office?: boolean; // coworking / flex space such as Regus or WeWork
   notes?: string;
+  custom?: Record<string, unknown>; // user-defined custom fields
+}
+
+// A user-defined custom field, applied to a record type (entity).
+export type FieldEntity = 'property' | 'lease' | 'transaction';
+export type FieldType = 'text' | 'number' | 'date' | 'select' | 'checkbox';
+export interface FieldDef {
+  id?: number;
+  entity: FieldEntity;
+  field_key: string;
+  label: string;
+  field_type: FieldType;
+  options?: string; // comma-separated choices for 'select'
+  sort_order?: number;
 }
 
 export interface Lease {
@@ -52,6 +66,7 @@ export interface Lease {
   property_name?: string;
   property_city?: string;
   property_state?: string;
+  custom?: Record<string, unknown>; // user-defined custom fields
 }
 
 export interface Transaction {
@@ -79,6 +94,7 @@ export interface Transaction {
   assigned_to?: string;
   coi_status?: string; // Certificate of Insurance status
   deposit_status?: string; // Security deposit workflow status
+  custom?: Record<string, unknown>; // user-defined custom fields
 }
 
 export interface DashboardData {

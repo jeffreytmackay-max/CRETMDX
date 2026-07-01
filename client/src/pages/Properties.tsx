@@ -14,6 +14,7 @@ import {
   Spinner,
 } from '../components/ui';
 import { SortGroupBar } from '../components/SortGroupBar';
+import CustomFields, { CustomFieldsView } from '../components/CustomFields';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 import { COUNTRIES, statesFor } from '../lib/geo';
 
@@ -317,6 +318,7 @@ export default function Properties() {
                               onAdd={() => navigate(`/leases?addForProperty=${p.id}`)}
                               onOpenTxn={(id) => navigate(`/transactions?open=${id}`)}
                             />
+                            <PropertyCustomView property={p} />
                           </td>
                         </tr>
                       )}
@@ -444,6 +446,14 @@ function PropertyLeases({
         </div>
       )}
     </div>
+  );
+}
+
+function PropertyCustomView({ property }: { property: Property }) {
+  return (
+    <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+      <CustomFieldsView entity="property" value={property.custom} />
+    </dl>
   );
 }
 
@@ -580,6 +590,13 @@ function PropertyForm({
           />
           Agile office space (e.g. Regus / WeWork)
         </label>
+        <div className="grid grid-cols-2 gap-3">
+          <CustomFields
+            entity="property"
+            value={form.custom}
+            onChange={(c) => set('custom', c)}
+          />
+        </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>
             Cancel
