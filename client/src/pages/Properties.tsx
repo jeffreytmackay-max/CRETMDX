@@ -15,6 +15,7 @@ import {
 } from '../components/ui';
 import { SortGroupBar } from '../components/SortGroupBar';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
+import { COUNTRIES, statesFor } from '../lib/geo';
 
 const PROPERTY_TYPES = [
   'Headquarters',
@@ -56,6 +57,7 @@ const EMPTY: Partial<Property> = {
   rentable_sqft: 0,
   status: 'Active',
   ownership: 'Leased',
+  agile_office: false,
 };
 
 export default function Properties() {
@@ -67,6 +69,7 @@ export default function Properties() {
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [groupKey, setGroupKey] = useState('none');
+  const [search, setSearch] = useState('');
 
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -120,11 +123,31 @@ export default function Properties() {
     return m;
   }, [leases]);
 
+  // Soonest lease expiration per property (earliest expiration among its leases).
+  const nextExpByProperty = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const [pid, ls] of leasesByProperty) {
+      const dates = ls.map((l) => l.expiration_date).filter(Boolean).sort();
+      if (dates.length) m.set(pid, dates[0]);
+    }
+    return m;
+  }, [leasesByProperty]);
+
+  const filteredProperties = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return properties;
+    return properties.filter((p) =>
+      [p.name, p.address, p.city, p.state, p.country, p.property_type, p.ownership, p.status]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q)),
+    );
+  }, [properties, search]);
+
   const groups = useMemo(() => {
-    const sorted = sortRows(properties, SORTS.find((s) => s.key === sortKey), sortDir);
+    const sorted = sortRows(filteredProperties, SORTS.find((s) => s.key === sortKey), sortDir);
     const groupOpt = groupKey === 'none' ? undefined : GROUPS.find((g) => g.key === groupKey);
     return groupRows(sorted, groupOpt);
-  }, [properties, sortKey, sortDir, groupKey]);
+  }, [filteredProperties, sortKey, sortDir, groupKey]);
 
   const sumSqft = (rows: Property[]) => rows.reduce((s, p) => s + (p.rentable_sqft || 0), 0);
   const sumRent = (rows: Property[]) =>
@@ -162,12 +185,16 @@ export default function Properties() {
       <div className="mb-6 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Properties</h1>
-          <p className="text-sm text-slate-500">{properties.length} sites in the portfolio</p>
+          <p className="text-sm text-slate-500">
+            {search
+              ? `${filteredProperties.length} of ${properties.length} sites`
+              : `${properties.length} sites in the portfolio`}
+          </p>
         </div>
         <Button onClick={() => setEditing(EMPTY)}>+ Add Property</Button>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <SortGroupBar
           sortKey={sortKey}
           setSortKey={setSortKey}
@@ -178,10 +205,18 @@ export default function Properties() {
           sortChoices={SORTS}
           groupChoices={GROUPS}
         />
+        <div className="sm:w-64">
+          <Input
+            type="search"
+            placeholder="Filter by name, city, state, type…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
       </div>
 
       <Card className="overflow-x-auto scroll-touch">
-        <table className="w-full min-w-[760px] text-sm">
+        <table className="w-full min-w-[880px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-5 py-3">Name</th>
@@ -190,6 +225,7 @@ export default function Properties() {
               <th className="px-5 py-3">Ownership</th>
               <th className="px-5 py-3 text-right">Rentable SF</th>
               <th className="px-5 py-3 text-right">Annual Rent</th>
+              <th className="px-5 py-3">Lease Exp.</th>
               <th className="px-5 py-3">Status</th>
               <th className="px-5 py-3"></th>
             </tr>
@@ -200,7 +236,7 @@ export default function Properties() {
                 {groupKey !== 'none' && (
                   <tr className="bg-slate-50/70">
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
                     >
                       {g.key} <span className="text-slate-400">· {g.rows.length}</span>
@@ -235,7 +271,14 @@ export default function Properties() {
                           <div className="text-xs text-slate-400">{p.country}</div>
                         </td>
                         <td className="px-5 py-3">
-                          <Badge>{p.property_type}</Badge>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Badge>{p.property_type}</Badge>
+                            {p.agile_office && (
+                              <span className="rounded-full bg-[#44546A]/10 px-2 py-0.5 text-xs font-medium text-[#44546A]">
+                                Agile
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-5 py-3 text-slate-600">{p.ownership}</td>
                         <td className="px-5 py-3 text-right tabular-nums text-slate-700">
@@ -243,6 +286,9 @@ export default function Properties() {
                         </td>
                         <td className="px-5 py-3 text-right tabular-nums text-slate-700">
                           {rentByProperty.get(p.id) ? usdCompact(rentByProperty.get(p.id)!) : '—'}
+                        </td>
+                        <td className="px-5 py-3 text-slate-600">
+                          {nextExpByProperty.get(p.id) ? fmtDate(nextExpByProperty.get(p.id)!) : '—'}
                         </td>
                         <td className="px-5 py-3">
                           <Badge>{p.status}</Badge>
@@ -264,7 +310,7 @@ export default function Properties() {
                       </tr>
                       {isOpen && (
                         <tr className="border-b border-slate-100 bg-slate-50/50">
-                          <td colSpan={8} className="px-5 py-3">
+                          <td colSpan={9} className="px-5 py-3">
                             <PropertyLeases
                               leases={plist}
                               transactions={txnsByProperty.get(p.id) || []}
@@ -288,7 +334,7 @@ export default function Properties() {
                     <td className="px-5 py-2 text-right text-xs font-semibold tabular-nums">
                       {usdCompact(sumRent(g.rows))}
                     </td>
-                    <td colSpan={2}></td>
+                    <td colSpan={3}></td>
                   </tr>
                 )}
               </Fragment>
@@ -297,11 +343,13 @@ export default function Properties() {
           <tfoot>
             <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold text-slate-800">
               <td colSpan={4} className="px-5 py-3">
-                Total · {num(properties.length)} properties
+                Total · {num(filteredProperties.length)} properties
               </td>
-              <td className="px-5 py-3 text-right tabular-nums">{num(sumSqft(properties))}</td>
-              <td className="px-5 py-3 text-right tabular-nums">{usd(sumRent(properties))}</td>
-              <td colSpan={2}></td>
+              <td className="px-5 py-3 text-right tabular-nums">
+                {num(sumSqft(filteredProperties))}
+              </td>
+              <td className="px-5 py-3 text-right tabular-nums">{usd(sumRent(filteredProperties))}</td>
+              <td colSpan={3}></td>
             </tr>
           </tfoot>
         </table>
@@ -430,8 +478,20 @@ function PropertyForm({
           <Field label="City">
             <Input value={form.city || ''} onChange={(e) => set('city', e.target.value)} />
           </Field>
-          <Field label="State">
-            <Input value={form.state || ''} onChange={(e) => set('state', e.target.value)} />
+          <Field label={statesFor(form.country) ? 'State / Region' : 'State / Region'}>
+            {statesFor(form.country) ? (
+              <Select value={form.state || ''} onChange={(e) => set('state', e.target.value)}>
+                <option value="">—</option>
+                {form.state && !statesFor(form.country)!.includes(form.state) && (
+                  <option value={form.state}>{form.state}</option>
+                )}
+                {statesFor(form.country)!.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </Select>
+            ) : (
+              <Input value={form.state || ''} onChange={(e) => set('state', e.target.value)} />
+            )}
           </Field>
           <Field label="Zip">
             <Input value={form.zip || ''} onChange={(e) => set('zip', e.target.value)} />
@@ -476,7 +536,25 @@ function PropertyForm({
         </div>
         <div className="grid grid-cols-3 gap-3">
           <Field label="Country">
-            <Input value={form.country || ''} onChange={(e) => set('country', e.target.value)} />
+            <Select
+              value={form.country || ''}
+              onChange={(e) => {
+                const c = e.target.value;
+                setForm((f) => {
+                  const opts = statesFor(c);
+                  const keep = !opts || (!!f.state && opts.includes(f.state));
+                  return { ...f, country: c, state: keep ? f.state : '' };
+                });
+              }}
+            >
+              <option value="">—</option>
+              {form.country && !COUNTRIES.includes(form.country) && (
+                <option value={form.country}>{form.country}</option>
+              )}
+              {COUNTRIES.map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </Select>
           </Field>
           <Field label="Ownership">
             <Select value={form.ownership} onChange={(e) => set('ownership', e.target.value)}>
@@ -493,6 +571,15 @@ function PropertyForm({
             </Select>
           </Field>
         </div>
+        <label className="flex items-center gap-2 pt-1 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={!!form.agile_office}
+            onChange={(e) => set('agile_office', e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+          />
+          Agile office space (e.g. Regus / WeWork)
+        </label>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>
             Cancel

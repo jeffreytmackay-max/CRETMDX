@@ -29,6 +29,7 @@ export function initSchema(): void {
       rentable_sqft INTEGER DEFAULT 0,
       status TEXT DEFAULT 'Active',
       ownership TEXT DEFAULT 'Leased',
+      agile_office INTEGER DEFAULT 0,
       notes TEXT,
       created_at TEXT DEFAULT (datetime('now'))
     );

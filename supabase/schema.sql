@@ -21,9 +21,11 @@ create table if not exists public.properties (
   rentable_sqft integer default 0,
   status        text default 'Active',
   ownership     text default 'Leased',
+  agile_office  boolean default false,
   notes         text,
   created_at    timestamptz default now()
 );
+alter table public.properties add column if not exists agile_office boolean default false;
 
 create table if not exists public.leases (
   id                   bigint generated always as identity primary key,

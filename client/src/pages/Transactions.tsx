@@ -217,17 +217,33 @@ export default function Transactions() {
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [groupKey, setGroupKey] = useState('none');
   const [importing, setImporting] = useState(false);
+  const [search, setSearch] = useState('');
 
   async function importTransactions(rows: Partial<Transaction>[]) {
     for (const r of rows) await api.createTransaction(r);
     await load();
   }
 
+  const filteredTxns = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return txns;
+    return txns.filter((t) =>
+      [
+        t.name, t.type, t.stage, t.market, t.space_type, t.progress, t.priority,
+        t.assigned_to, t.coi_status, t.deposit_status,
+        t.property_id != null ? propName.get(t.property_id) : '',
+        t.lease_id != null ? leaseName.get(t.lease_id) : '',
+      ]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q)),
+    );
+  }, [txns, search, propName, leaseName]);
+
   const listGroups = useMemo(() => {
-    const sorted = sortRows(txns, TX_SORTS.find((s) => s.key === sortKey), sortDir);
+    const sorted = sortRows(filteredTxns, TX_SORTS.find((s) => s.key === sortKey), sortDir);
     const groupOpt = groupKey === 'none' ? undefined : TX_GROUPS.find((g) => g.key === groupKey);
     return groupRows(sorted, groupOpt);
-  }, [txns, sortKey, sortDir, groupKey]);
+  }, [filteredTxns, sortKey, sortDir, groupKey]);
 
   const load = async () => {
     const [tRaw, p, l] = await Promise.all([api.transactions(), api.properties(), api.leases()]);
@@ -354,7 +370,7 @@ export default function Transactions() {
 
       {view === 'list' && (
         <div className="flex-1 overflow-y-auto scroll-touch p-4 md:p-6">
-          <div className="mb-4">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <SortGroupBar
               sortKey={sortKey}
               setSortKey={setSortKey}
@@ -365,6 +381,14 @@ export default function Transactions() {
               sortChoices={TX_SORTS}
               groupChoices={TX_GROUPS}
             />
+            <div className="sm:w-64">
+              <Input
+                type="search"
+                placeholder="Filter by name, stage, assignee…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
           </div>
           <Card className="overflow-x-auto scroll-touch">
             <table className="w-full min-w-[900px] text-sm">
@@ -465,10 +489,10 @@ export default function Transactions() {
                     ))}
                   </Fragment>
                 ))}
-                {txns.length === 0 && (
+                {filteredTxns.length === 0 && (
                   <tr>
                     <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-400">
-                      No transactions yet.
+                      {txns.length === 0 ? 'No transactions yet.' : 'No matching transactions.'}
                     </td>
                   </tr>
                 )}

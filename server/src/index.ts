@@ -12,7 +12,7 @@ app.use(express.json({ limit: '2mb' }));
 
 const PROPERTY_COLS = [
   'name', 'address', 'city', 'state', 'zip', 'country', 'lat', 'lng',
-  'property_type', 'rentable_sqft', 'status', 'ownership', 'notes',
+  'property_type', 'rentable_sqft', 'status', 'ownership', 'agile_office', 'notes',
 ];
 const LEASE_COLS = [
   'property_id', 'lease_name', 'counterparty', 'lease_type', 'role',

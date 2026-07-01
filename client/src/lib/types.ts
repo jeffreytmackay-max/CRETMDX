@@ -12,6 +12,7 @@ export interface Property {
   rentable_sqft: number;
   status: string;
   ownership: string;
+  agile_office?: boolean; // coworking / flex space such as Regus or WeWork
   notes?: string;
 }
 
