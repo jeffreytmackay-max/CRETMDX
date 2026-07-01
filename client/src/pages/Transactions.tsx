@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Property, Lease, Transaction } from '../lib/types';
 import { usdCompact, num, fmtDate } from '../lib/format';
@@ -241,6 +241,23 @@ export default function Transactions() {
   useEffect(() => {
     load();
   }, []);
+
+  // Deep-link from a Property/Lease: open a specific transaction (?open=).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openedRef = useRef(false);
+  useEffect(() => {
+    if (openedRef.current) return;
+    const openId = searchParams.get('open');
+    if (!openId || txns.length === 0) return;
+    const t = txns.find((x) => x.id === Number(openId));
+    if (!t) return;
+    openedRef.current = true;
+    setView('list');
+    setEditing(t);
+    const next = new URLSearchParams(searchParams);
+    next.delete('open');
+    setSearchParams(next, { replace: true });
+  }, [txns, searchParams, setSearchParams]);
 
   const byStage = useMemo(() => {
     const m: Record<string, Transaction[]> = {};

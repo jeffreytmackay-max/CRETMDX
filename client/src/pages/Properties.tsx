@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import type { Property, Lease } from '../lib/types';
+import type { Property, Lease, Transaction } from '../lib/types';
 import { num, usd, usdCompact, fmtDate } from '../lib/format';
 import {
   Badge,
@@ -61,6 +61,7 @@ const EMPTY: Partial<Property> = {
 export default function Properties() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Property> | null>(null);
   const [sortKey, setSortKey] = useState('name');
@@ -98,6 +99,17 @@ export default function Properties() {
     return m;
   }, [leases]);
 
+  // Transactions related to each property.
+  const txnsByProperty = useMemo(() => {
+    const m = new Map<number, Transaction[]>();
+    for (const t of transactions) {
+      if (t.property_id == null) continue;
+      if (!m.has(t.property_id)) m.set(t.property_id, []);
+      m.get(t.property_id)!.push(t);
+    }
+    return m;
+  }, [transactions]);
+
   // Annual rent per property = sum of its active leases' base rent.
   const rentByProperty = useMemo(() => {
     const m = new Map<number, number>();
@@ -119,9 +131,10 @@ export default function Properties() {
     rows.reduce((s, p) => s + (rentByProperty.get(p.id) || 0), 0);
 
   const load = () =>
-    Promise.all([api.properties(), api.leases()]).then(([p, l]) => {
+    Promise.all([api.properties(), api.leases(), api.transactions()]).then(([p, l, t]) => {
       setProperties(p);
       setLeases(l);
+      setTransactions(t);
       setLoading(false);
     });
 
@@ -254,7 +267,9 @@ export default function Properties() {
                           <td colSpan={8} className="px-5 py-3">
                             <PropertyLeases
                               leases={plist}
+                              transactions={txnsByProperty.get(p.id) || []}
                               onAdd={() => navigate(`/leases?addForProperty=${p.id}`)}
+                              onOpenTxn={(id) => navigate(`/transactions?open=${id}`)}
                             />
                           </td>
                         </tr>
@@ -304,8 +319,18 @@ export default function Properties() {
 }
 
 // Inline list of all leases assigned to a property, with a shortcut to add
-// another. A property can hold any number of leases.
-function PropertyLeases({ leases, onAdd }: { leases: Lease[]; onAdd: () => void }) {
+// another, plus any related transactions. A property can hold any number of leases.
+function PropertyLeases({
+  leases,
+  transactions,
+  onAdd,
+  onOpenTxn,
+}: {
+  leases: Lease[];
+  transactions: Transaction[];
+  onAdd: () => void;
+  onOpenTxn: (id: number) => void;
+}) {
   return (
     <div>
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -348,6 +373,26 @@ function PropertyLeases({ leases, onAdd }: { leases: Lease[]; onAdd: () => void 
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {transactions.length > 0 && (
+        <div className="mt-3">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Related transactions ({transactions.length})
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {transactions.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => onOpenTxn(t.id)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 hover:border-blue-300 hover:text-blue-600"
+                title={`${t.type} · ${t.stage}`}
+              >
+                ⇄ {t.name} <span className="text-slate-400">· {t.stage}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

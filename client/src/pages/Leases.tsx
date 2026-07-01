@@ -8,9 +8,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import type { Lease, Property, ScheduleRow } from '../lib/types';
+import type { Lease, Property, ScheduleRow, Transaction } from '../lib/types';
 import { usd, usdCompact, num, fmtDate, monthsUntil } from '../lib/format';
 import { abstractLeasePdf, abstractToLease, hasApiKey } from '../lib/ai';
 import { savePdf, deletePdf, listPdfIds, openPdf } from '../lib/pdfStore';
@@ -67,12 +67,20 @@ export default function Leases() {
   const [importing, setImporting] = useState(false);
   const [batch, setBatch] = useState<{ lease: Partial<Lease>; file: File }[] | null>(null);
   const [pdfIds, setPdfIds] = useState<Set<number>>(new Set());
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const navigate = useNavigate();
 
   const load = async () => {
-    const [l, p, ids] = await Promise.all([api.leases(), api.properties(), listPdfIds()]);
+    const [l, p, ids, t] = await Promise.all([
+      api.leases(),
+      api.properties(),
+      listPdfIds(),
+      api.transactions(),
+    ]);
     setLeases(l);
     setProperties(p);
     setPdfIds(new Set(ids));
+    setTransactions(t);
     setLoading(false);
   };
 
@@ -337,6 +345,8 @@ export default function Leases() {
         <LeaseDetail
           id={detailId}
           hasPdf={pdfIds.has(detailId)}
+          transactions={transactions.filter((t) => t.lease_id === detailId)}
+          onOpenTxn={(id) => navigate(`/transactions?open=${id}`)}
           onClose={() => setDetailId(null)}
         />
       )}
@@ -694,10 +704,14 @@ function printAbstract(lease: Lease, termYears: number, schedule: ScheduleRow[])
 function LeaseDetail({
   id,
   hasPdf,
+  transactions,
+  onOpenTxn,
   onClose,
 }: {
   id: number;
   hasPdf: boolean;
+  transactions: Transaction[];
+  onOpenTxn: (id: number) => void;
   onClose: () => void;
 }) {
   const [data, setData] = useState<{ lease: Lease; termYears: number; schedule: ScheduleRow[] } | null>(
@@ -830,6 +844,26 @@ function LeaseDetail({
             Notes & Abstract
           </div>
           <p className="whitespace-pre-wrap text-sm text-slate-700">{lease.notes}</p>
+        </div>
+      )}
+
+      {transactions.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Related transactions ({transactions.length})
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {transactions.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => onOpenTxn(t.id)}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 hover:border-blue-300 hover:text-blue-600"
+                title={`${t.type} · ${t.stage}`}
+              >
+                ⇄ {t.name} <span className="text-slate-400">· {t.stage}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
