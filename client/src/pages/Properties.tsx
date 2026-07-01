@@ -15,7 +15,12 @@ import {
 } from '../components/ui';
 import { SortGroupBar } from '../components/SortGroupBar';
 import CustomFields, { CustomFieldsView } from '../components/CustomFields';
+import ColumnPicker from '../components/ColumnPicker';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
+import { useColumns, type ColumnDef } from '../lib/columns';
+import { customColumns } from '../lib/tableColumns';
+import { getFieldDefs } from '../lib/fields';
+import type { FieldDef } from '../lib/types';
 import { COUNTRIES, statesFor } from '../lib/geo';
 
 const PROPERTY_TYPES = [
@@ -150,9 +155,100 @@ export default function Properties() {
     return groupRows(sorted, groupOpt);
   }, [filteredProperties, sortKey, sortDir, groupKey]);
 
-  const sumSqft = (rows: Property[]) => rows.reduce((s, p) => s + (p.rentable_sqft || 0), 0);
-  const sumRent = (rows: Property[]) =>
-    rows.reduce((s, p) => s + (rentByProperty.get(p.id) || 0), 0);
+  // ---- Dynamic columns ----
+  const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
+  useEffect(() => {
+    getFieldDefs('property').then(setPropDefs);
+  }, []);
+
+  const allColumns = useMemo<ColumnDef<Property>[]>(() => {
+    const base: ColumnDef<Property>[] = [
+      {
+        key: 'location',
+        label: 'Location',
+        group: 'This tab',
+        render: (p) => (
+          <>
+            {p.city}, {p.state}
+            <div className="text-xs text-slate-400">{p.country}</div>
+          </>
+        ),
+      },
+      {
+        key: 'type',
+        label: 'Type',
+        group: 'This tab',
+        render: (p) => (
+          <div className="flex flex-wrap items-center gap-1">
+            <Badge>{p.property_type}</Badge>
+            {p.agile_office && (
+              <span className="rounded-full bg-[#44546A]/10 px-2 py-0.5 text-xs font-medium text-[#44546A]">
+                Agile
+              </span>
+            )}
+          </div>
+        ),
+      },
+      { key: 'ownership', label: 'Ownership', group: 'This tab', render: (p) => p.ownership },
+      {
+        key: 'rentable_sqft',
+        label: 'Rentable SF',
+        group: 'This tab',
+        align: 'right',
+        render: (p) => <span className="tabular-nums">{num(p.rentable_sqft)}</span>,
+        sum: (p) => p.rentable_sqft || 0,
+        fmtSum: (n) => num(n),
+      },
+      {
+        key: 'annual_rent',
+        label: 'Annual Rent',
+        group: 'From Leases',
+        align: 'right',
+        render: (p) => (
+          <span className="tabular-nums">
+            {rentByProperty.get(p.id) ? usdCompact(rentByProperty.get(p.id)!) : '—'}
+          </span>
+        ),
+        sum: (p) => rentByProperty.get(p.id) || 0,
+        fmtSum: (n) => usd(n),
+      },
+      {
+        key: 'lease_exp',
+        label: 'Lease Exp.',
+        group: 'From Leases',
+        render: (p) =>
+          nextExpByProperty.get(p.id) ? fmtDate(nextExpByProperty.get(p.id)!) : '—',
+      },
+      { key: 'status', label: 'Status', group: 'This tab', render: (p) => <Badge>{p.status}</Badge> },
+      // Available but hidden by default:
+      { key: 'address', label: 'Address', group: 'This tab', defaultVisible: false, render: (p) => p.address || '—' },
+      { key: 'zip', label: 'Zip', group: 'This tab', defaultVisible: false, render: (p) => p.zip || '—' },
+      {
+        key: 'agile',
+        label: 'Agile Office',
+        group: 'This tab',
+        defaultVisible: false,
+        render: (p) => (p.agile_office ? 'Yes' : 'No'),
+      },
+      {
+        key: 'lease_count',
+        label: 'Lease Count',
+        group: 'From Leases',
+        align: 'right',
+        defaultVisible: false,
+        render: (p) => <span className="tabular-nums">{(leasesByProperty.get(p.id) || []).length}</span>,
+      },
+    ];
+    return [...base, ...customColumns<Property>(propDefs, 'Custom fields', (p) => p.custom)];
+  }, [rentByProperty, nextExpByProperty, leasesByProperty, propDefs]);
+
+  const { keys: colKeys, setKeys: setColKeys, reset: resetCols, columns } = useColumns(
+    'property',
+    allColumns,
+  );
+  const colCount = columns.length + 2; // identity (Name) + actions
+  const sumCol = (c: ColumnDef<Property>, rows: Property[]): React.ReactNode =>
+    c.sum ? (c.fmtSum ?? num)(rows.reduce((s, p) => s + c.sum!(p), 0)) : '';
 
   const load = () =>
     Promise.all([api.properties(), api.leases(), api.transactions()]).then(([p, l, t]) => {
@@ -206,13 +302,16 @@ export default function Properties() {
           sortChoices={SORTS}
           groupChoices={GROUPS}
         />
-        <div className="sm:w-64">
-          <Input
-            type="search"
-            placeholder="Filter by name, city, state, type…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+        <div className="flex items-center gap-2">
+          <ColumnPicker all={allColumns} visible={colKeys} onChange={setColKeys} onReset={resetCols} />
+          <div className="sm:w-64">
+            <Input
+              type="search"
+              placeholder="Filter by name, city, state, type…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -221,13 +320,11 @@ export default function Properties() {
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-5 py-3">Name</th>
-              <th className="px-5 py-3">Location</th>
-              <th className="px-5 py-3">Type</th>
-              <th className="px-5 py-3">Ownership</th>
-              <th className="px-5 py-3 text-right">Rentable SF</th>
-              <th className="px-5 py-3 text-right">Annual Rent</th>
-              <th className="px-5 py-3">Lease Exp.</th>
-              <th className="px-5 py-3">Status</th>
+              {columns.map((c) => (
+                <th key={c.key} className={`px-5 py-3 ${c.align === 'right' ? 'text-right' : ''}`}>
+                  {c.label}
+                </th>
+              ))}
               <th className="px-5 py-3"></th>
             </tr>
           </thead>
@@ -237,7 +334,7 @@ export default function Properties() {
                 {groupKey !== 'none' && (
                   <tr className="bg-slate-50/70">
                     <td
-                      colSpan={9}
+                      colSpan={colCount}
                       className="px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
                     >
                       {g.key} <span className="text-slate-400">· {g.rows.length}</span>
@@ -267,33 +364,14 @@ export default function Properties() {
                             </span>
                           </button>
                         </td>
-                        <td className="px-5 py-3 text-slate-600">
-                          {p.city}, {p.state}
-                          <div className="text-xs text-slate-400">{p.country}</div>
-                        </td>
-                        <td className="px-5 py-3">
-                          <div className="flex flex-wrap items-center gap-1">
-                            <Badge>{p.property_type}</Badge>
-                            {p.agile_office && (
-                              <span className="rounded-full bg-[#44546A]/10 px-2 py-0.5 text-xs font-medium text-[#44546A]">
-                                Agile
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-5 py-3 text-slate-600">{p.ownership}</td>
-                        <td className="px-5 py-3 text-right tabular-nums text-slate-700">
-                          {num(p.rentable_sqft)}
-                        </td>
-                        <td className="px-5 py-3 text-right tabular-nums text-slate-700">
-                          {rentByProperty.get(p.id) ? usdCompact(rentByProperty.get(p.id)!) : '—'}
-                        </td>
-                        <td className="px-5 py-3 text-slate-600">
-                          {nextExpByProperty.get(p.id) ? fmtDate(nextExpByProperty.get(p.id)!) : '—'}
-                        </td>
-                        <td className="px-5 py-3">
-                          <Badge>{p.status}</Badge>
-                        </td>
+                        {columns.map((c) => (
+                          <td
+                            key={c.key}
+                            className={`px-5 py-3 text-slate-600 ${c.align === 'right' ? 'text-right' : ''}`}
+                          >
+                            {c.render(p)}
+                          </td>
+                        ))}
                         <td className="px-5 py-3 text-right">
                           <button
                             className="mr-3 text-xs font-medium text-blue-600 hover:underline"
@@ -311,7 +389,7 @@ export default function Properties() {
                       </tr>
                       {isOpen && (
                         <tr className="border-b border-slate-100 bg-slate-50/50">
-                          <td colSpan={9} className="px-5 py-3">
+                          <td colSpan={colCount} className="px-5 py-3">
                             <PropertyLeases
                               leases={plist}
                               transactions={txnsByProperty.get(p.id) || []}
@@ -327,16 +405,20 @@ export default function Properties() {
                 })}
                 {groupKey !== 'none' && (
                   <tr className="border-b border-slate-200 bg-slate-50/40 text-slate-600">
-                    <td colSpan={4} className="px-5 py-2 text-xs font-medium">
+                    <td className="px-5 py-2 text-xs font-medium">
                       {g.key} subtotal · {g.rows.length}
                     </td>
-                    <td className="px-5 py-2 text-right text-xs font-semibold tabular-nums">
-                      {num(sumSqft(g.rows))}
-                    </td>
-                    <td className="px-5 py-2 text-right text-xs font-semibold tabular-nums">
-                      {usdCompact(sumRent(g.rows))}
-                    </td>
-                    <td colSpan={3}></td>
+                    {columns.map((c) => (
+                      <td
+                        key={c.key}
+                        className={`px-5 py-2 text-xs font-semibold tabular-nums ${
+                          c.align === 'right' ? 'text-right' : ''
+                        }`}
+                      >
+                        {sumCol(c, g.rows)}
+                      </td>
+                    ))}
+                    <td></td>
                   </tr>
                 )}
               </Fragment>
@@ -344,14 +426,18 @@ export default function Properties() {
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold text-slate-800">
-              <td colSpan={4} className="px-5 py-3">
+              <td className="px-5 py-3">
                 Total · {num(filteredProperties.length)} properties
               </td>
-              <td className="px-5 py-3 text-right tabular-nums">
-                {num(sumSqft(filteredProperties))}
-              </td>
-              <td className="px-5 py-3 text-right tabular-nums">{usd(sumRent(filteredProperties))}</td>
-              <td colSpan={3}></td>
+              {columns.map((c) => (
+                <td
+                  key={c.key}
+                  className={`px-5 py-3 tabular-nums ${c.align === 'right' ? 'text-right' : ''}`}
+                >
+                  {sumCol(c, filteredProperties)}
+                </td>
+              ))}
+              <td></td>
             </tr>
           </tfoot>
         </table>

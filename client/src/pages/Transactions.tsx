@@ -5,8 +5,13 @@ import type { Property, Lease, Transaction } from '../lib/types';
 import { usdCompact, num, fmtDate } from '../lib/format';
 import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
 import CustomFields from '../components/CustomFields';
+import ColumnPicker from '../components/ColumnPicker';
 import { SortGroupBar } from '../components/SortGroupBar';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
+import { useColumns, type ColumnDef } from '../lib/columns';
+import { propertyColumns, leaseColumns, customColumns } from '../lib/tableColumns';
+import { getFieldDefs } from '../lib/fields';
+import type { FieldDef } from '../lib/types';
 import { parseCsv } from '../lib/csv';
 import {
   addTxnAttachment,
@@ -246,6 +251,80 @@ export default function Transactions() {
     return groupRows(sorted, groupOpt);
   }, [filteredTxns, sortKey, sortDir, groupKey]);
 
+  // ---- Dynamic columns (List view) ----
+  const propsById = useMemo(() => new Map(properties.map((p) => [p.id, p])), [properties]);
+  const leasesById = useMemo(() => new Map(leases.map((l) => [l.id, l])), [leases]);
+  const [txnDefs, setTxnDefs] = useState<FieldDef[]>([]);
+  const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
+  const [leaseDefs, setLeaseDefs] = useState<FieldDef[]>([]);
+  useEffect(() => {
+    getFieldDefs('transaction').then(setTxnDefs);
+    getFieldDefs('property').then(setPropDefs);
+    getFieldDefs('lease').then(setLeaseDefs);
+  }, []);
+
+  const allColumns = useMemo<ColumnDef<Transaction>[]>(() => {
+    const native: ColumnDef<Transaction>[] = [
+      { key: 'type', label: 'Type', group: 'This tab', render: (t) => t.type },
+      { key: 'stage', label: 'Stage', group: 'This tab', render: (t) => t.stage },
+      {
+        key: 'priority',
+        label: 'Priority',
+        group: 'This tab',
+        render: (t) =>
+          t.priority ? (
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                PRIORITY_BADGE[t.priority] || 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {t.priority}
+            </span>
+          ) : (
+            '—'
+          ),
+      },
+      { key: 'progress', label: 'Status', group: 'This tab', render: (t) => t.progress || '—' },
+      { key: 'assigned_to', label: 'Assigned To', group: 'This tab', render: (t) => t.assigned_to || '—' },
+      { key: 'date_needed_by', label: 'Need By', group: 'This tab', render: (t) => fmtDate(t.date_needed_by) },
+      {
+        key: 'estimated_value',
+        label: 'Annual Cost',
+        group: 'This tab',
+        align: 'right',
+        render: (t) => (
+          <span className="tabular-nums">{t.estimated_value ? usdCompact(t.estimated_value) : '—'}</span>
+        ),
+      },
+      // Available but hidden by default:
+      { key: 'space_type', label: 'Space Type', group: 'This tab', defaultVisible: false, render: (t) => t.space_type || '—' },
+      { key: 'market', label: 'Market', group: 'This tab', defaultVisible: false, render: (t) => t.market || '—' },
+      { key: 'coi_status', label: 'COI Status', group: 'This tab', defaultVisible: false, render: (t) => t.coi_status || '—' },
+      { key: 'deposit_status', label: 'Deposit Status', group: 'This tab', defaultVisible: false, render: (t) => t.deposit_status || '—' },
+      { key: 'target_close_date', label: 'Target Close', group: 'This tab', defaultVisible: false, render: (t) => fmtDate(t.target_close_date) },
+    ];
+    return [
+      ...native,
+      ...propertyColumns<Transaction>(
+        (t) => (t.property_id != null ? propsById.get(t.property_id) : undefined),
+        (id) => navigate(`/properties?expand=${id}`),
+        propDefs,
+      ),
+      ...leaseColumns<Transaction>(
+        (t) => (t.lease_id != null ? leasesById.get(t.lease_id) : undefined),
+        (id) => navigate(`/leases?view=${id}`),
+        leaseDefs,
+      ),
+      ...customColumns<Transaction>(txnDefs, 'Custom fields', (t) => t.custom),
+    ];
+  }, [propsById, leasesById, propDefs, leaseDefs, txnDefs, navigate]);
+
+  const { keys: colKeys, setKeys: setColKeys, reset: resetCols, columns } = useColumns(
+    'transaction',
+    allColumns,
+  );
+  const colCount = columns.length + 2; // identity (Transaction) + actions
+
   const load = async () => {
     const [tRaw, p, l] = await Promise.all([api.transactions(), api.properties(), api.leases()]);
     // Prefer the cloud links value; fall back to the device-local copy.
@@ -382,13 +461,16 @@ export default function Transactions() {
               sortChoices={TX_SORTS}
               groupChoices={TX_GROUPS}
             />
-            <div className="sm:w-64">
-              <Input
-                type="search"
-                placeholder="Filter by name, stage, assignee…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+            <div className="flex items-center gap-2">
+              <ColumnPicker all={allColumns} visible={colKeys} onChange={setColKeys} onReset={resetCols} />
+              <div className="sm:w-64">
+                <Input
+                  type="search"
+                  placeholder="Filter by name, stage, assignee…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
             </div>
           </div>
           <Card className="overflow-x-auto scroll-touch">
@@ -396,13 +478,11 @@ export default function Transactions() {
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-4 py-3">Transaction</th>
-                  <th className="px-4 py-3">Type</th>
-                  <th className="px-4 py-3">Stage</th>
-                  <th className="px-4 py-3">Priority</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Assigned To</th>
-                  <th className="px-4 py-3">Need By</th>
-                  <th className="px-4 py-3 text-right">Annual Cost</th>
+                  {columns.map((c) => (
+                    <th key={c.key} className={`px-4 py-3 ${c.align === 'right' ? 'text-right' : ''}`}>
+                      {c.label}
+                    </th>
+                  ))}
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -412,7 +492,7 @@ export default function Transactions() {
                     {groupKey !== 'none' && (
                       <tr className="bg-slate-50/70">
                         <td
-                          colSpan={9}
+                          colSpan={colCount}
                           className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
                         >
                           {g.key} <span className="text-slate-400">· {g.rows.length}</span>
@@ -453,25 +533,14 @@ export default function Transactions() {
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-slate-600">{t.type}</td>
-                        <td className="px-4 py-3 text-slate-600">{t.stage}</td>
-                        <td className="px-4 py-3">
-                          {t.priority && (
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                                PRIORITY_BADGE[t.priority] || 'bg-slate-100 text-slate-600'
-                              }`}
-                            >
-                              {t.priority}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600">{t.progress || '—'}</td>
-                        <td className="px-4 py-3 text-slate-600">{t.assigned_to || '—'}</td>
-                        <td className="px-4 py-3 text-slate-600">{fmtDate(t.date_needed_by)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-700">
-                          {t.estimated_value ? usdCompact(t.estimated_value) : '—'}
-                        </td>
+                        {columns.map((c) => (
+                          <td
+                            key={c.key}
+                            className={`px-4 py-3 text-slate-600 ${c.align === 'right' ? 'text-right' : ''}`}
+                          >
+                            {c.render(t)}
+                          </td>
+                        ))}
                         <td className="px-4 py-3 text-right whitespace-nowrap">
                           <button
                             className="mr-3 text-xs font-medium text-blue-600 hover:underline"
@@ -492,7 +561,7 @@ export default function Transactions() {
                 ))}
                 {filteredTxns.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-400">
+                    <td colSpan={colCount} className="px-4 py-8 text-center text-sm text-slate-400">
                       {txns.length === 0 ? 'No transactions yet.' : 'No matching transactions.'}
                     </td>
                   </tr>

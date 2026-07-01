@@ -27,7 +27,12 @@ import {
 } from '../components/ui';
 import { SortGroupBar } from '../components/SortGroupBar';
 import CustomFields, { CustomFieldsView } from '../components/CustomFields';
+import ColumnPicker from '../components/ColumnPicker';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
+import { useColumns, type ColumnDef } from '../lib/columns';
+import { propertyColumns, customColumns } from '../lib/tableColumns';
+import { getFieldDefs } from '../lib/fields';
+import type { FieldDef } from '../lib/types';
 
 type Filter = 'all' | 'expiring' | 'active';
 
@@ -137,6 +142,87 @@ export default function Leases() {
     return groupRows(sorted, groupOpt);
   }, [filtered, sortKey, sortDir, groupKey]);
 
+  // ---- Dynamic columns ----
+  const propsById = useMemo(() => new Map(properties.map((p) => [p.id, p])), [properties]);
+  const [leaseDefs, setLeaseDefs] = useState<FieldDef[]>([]);
+  const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
+  useEffect(() => {
+    getFieldDefs('lease').then(setLeaseDefs);
+    getFieldDefs('property').then(setPropDefs);
+  }, []);
+
+  const allColumns = useMemo<ColumnDef<Lease>[]>(() => {
+    const propCols = propertyColumns<Lease>(
+      (l) => propsById.get(l.property_id),
+      (id) => navigate(`/properties?expand=${id}`),
+      propDefs,
+    );
+    const nameCol = { ...propCols[0], defaultVisible: true }; // "Property" column, shown by default
+    const otherPropCols = propCols.slice(1);
+    const native: ColumnDef<Lease>[] = [
+      { key: 'type', label: 'Type', group: 'This tab', render: (l) => <Badge>{l.lease_type}</Badge> },
+      {
+        key: 'rentable_sqft',
+        label: 'Sq Ft',
+        group: 'This tab',
+        align: 'right',
+        render: (l) => <span className="tabular-nums">{num(l.rentable_sqft)}</span>,
+      },
+      {
+        key: 'base_rent',
+        label: 'Base Rent/yr',
+        group: 'This tab',
+        align: 'right',
+        render: (l) => <span className="tabular-nums">{usdCompact(l.base_rent_annual)}</span>,
+      },
+      {
+        key: 'expiration',
+        label: 'Expiration',
+        group: 'This tab',
+        render: (l) => (
+          <>
+            <div className="text-slate-700">{fmtDate(l.expiration_date)}</div>
+            <ExpiryPill months={monthsUntil(l.expiration_date)} />
+          </>
+        ),
+      },
+      {
+        key: 'notice_by',
+        label: 'Notice By',
+        group: 'This tab',
+        render: (l) => {
+          const noticeDate = addMonths(l.expiration_date, -(l.notice_period_months || 0));
+          const noticeMonths = monthsUntil(noticeDate);
+          return (
+            <>
+              <div className="text-slate-700">{fmtDate(noticeDate)}</div>
+              {noticeMonths >= 0 && noticeMonths <= 6 && (
+                <span className="text-xs font-medium text-amber-600">action soon</span>
+              )}
+            </>
+          );
+        },
+      },
+      // Available but hidden by default:
+      { key: 'commencement', label: 'Commencement', group: 'This tab', defaultVisible: false, render: (l) => fmtDate(l.commencement_date) },
+      { key: 'status', label: 'Status', group: 'This tab', defaultVisible: false, render: (l) => <Badge>{l.status}</Badge> },
+      { key: 'building_type', label: 'Building Type', group: 'This tab', defaultVisible: false, render: (l) => l.building_type || '—' },
+      { key: 'escalation', label: 'Escalation %', group: 'This tab', align: 'right', defaultVisible: false, render: (l) => (l.escalation_pct ? `${l.escalation_pct}%` : '—') },
+    ];
+    return [
+      nameCol,
+      ...native,
+      ...otherPropCols,
+      ...customColumns<Lease>(leaseDefs, 'Custom fields', (l) => l.custom),
+    ];
+  }, [propsById, propDefs, leaseDefs, navigate]);
+
+  const { keys: colKeys, setKeys: setColKeys, reset: resetCols, columns } = useColumns(
+    'lease',
+    allColumns,
+  );
+  const colCount = columns.length + 2; // identity (Lease) + actions
+
   // Fill a property's Rentable SF from its leases ONLY when the property has no
   // SqFt yet (blank/zero). This auto-populates empty portfolio records from lease
   // data without ever overwriting a value entered manually. Runs after any lease
@@ -233,7 +319,7 @@ export default function Leases() {
         </div>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-4 flex items-center justify-between gap-3">
         <SortGroupBar
           sortKey={sortKey}
           setSortKey={setSortKey}
@@ -244,6 +330,7 @@ export default function Leases() {
           sortChoices={SORTS}
           groupChoices={GROUPS}
         />
+        <ColumnPicker all={allColumns} visible={colKeys} onChange={setColKeys} onReset={resetCols} />
       </div>
 
       <Card className="overflow-x-auto scroll-touch">
@@ -251,12 +338,11 @@ export default function Leases() {
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-5 py-3">Lease</th>
-              <th className="px-5 py-3">Property</th>
-              <th className="px-5 py-3">Type</th>
-              <th className="px-5 py-3 text-right">Sq Ft</th>
-              <th className="px-5 py-3 text-right">Base Rent/yr</th>
-              <th className="px-5 py-3">Expiration</th>
-              <th className="px-5 py-3">Notice By</th>
+              {columns.map((c) => (
+                <th key={c.key} className={`px-5 py-3 ${c.align === 'right' ? 'text-right' : ''}`}>
+                  {c.label}
+                </th>
+              ))}
               <th className="px-5 py-3"></th>
             </tr>
           </thead>
@@ -266,7 +352,7 @@ export default function Leases() {
                 {groupKey !== 'none' && (
                   <tr className="bg-slate-50/70">
                     <td
-                      colSpan={8}
+                      colSpan={colCount}
                       className="px-5 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500"
                     >
                       {g.key} <span className="text-slate-400">· {g.rows.length}</span>
@@ -274,9 +360,6 @@ export default function Leases() {
                   </tr>
                 )}
                 {g.rows.map((l) => {
-                  const months = monthsUntil(l.expiration_date);
-                  const noticeDate = addMonths(l.expiration_date, -(l.notice_period_months || 0));
-                  const noticeMonths = monthsUntil(noticeDate);
                   return (
                     <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
                   <td className="px-5 py-3">
@@ -299,38 +382,14 @@ export default function Leases() {
                     </div>
                     <div className="text-xs text-slate-400">{l.counterparty}</div>
                   </td>
-                  <td className="px-5 py-3">
-                    {l.property_id && l.property_name ? (
-                      <button
-                        onClick={() => navigate(`/properties?expand=${l.property_id}`)}
-                        className="text-left text-sm text-blue-600 hover:underline"
-                        title="Open in Properties"
-                      >
-                        🏢 {l.property_name}
-                      </button>
-                    ) : (
-                      <span className="text-sm text-slate-400">—</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-3">
-                    <Badge>{l.lease_type}</Badge>
-                  </td>
-                  <td className="px-5 py-3 text-right tabular-nums text-slate-700">
-                    {num(l.rentable_sqft)}
-                  </td>
-                  <td className="px-5 py-3 text-right tabular-nums text-slate-700">
-                    {usdCompact(l.base_rent_annual)}
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="text-slate-700">{fmtDate(l.expiration_date)}</div>
-                    <ExpiryPill months={months} />
-                  </td>
-                  <td className="px-5 py-3">
-                    <div className="text-slate-700">{fmtDate(noticeDate)}</div>
-                    {noticeMonths >= 0 && noticeMonths <= 6 && (
-                      <span className="text-xs font-medium text-amber-600">action soon</span>
-                    )}
-                  </td>
+                  {columns.map((c) => (
+                    <td
+                      key={c.key}
+                      className={`px-5 py-3 text-slate-600 ${c.align === 'right' ? 'text-right' : ''}`}
+                    >
+                      {c.render(l)}
+                    </td>
+                  ))}
                   <td className="px-5 py-3 text-right whitespace-nowrap">
                     <button
                       className="mr-3 text-xs font-medium text-blue-600 hover:underline"
