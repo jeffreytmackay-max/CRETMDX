@@ -64,6 +64,7 @@ create table if not exists public.transactions (
   id                bigint generated always as identity primary key,
   name              text not null,
   property_id       bigint references public.properties(id) on delete set null,
+  lease_id          bigint references public.leases(id) on delete set null,
   type              text default 'New Lease',
   stage             text default 'Prospecting',
   market            text,
@@ -94,6 +95,7 @@ alter table public.transactions add column if not exists priority text;
 alter table public.transactions add column if not exists assigned_to text;
 alter table public.transactions add column if not exists coi_status text;
 alter table public.transactions add column if not exists deposit_status text;
+alter table public.transactions add column if not exists lease_id bigint references public.leases(id) on delete set null;
 
 create index if not exists leases_property_id_idx on public.leases(property_id);
 create index if not exists transactions_property_id_idx on public.transactions(property_id);

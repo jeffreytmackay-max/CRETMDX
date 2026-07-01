@@ -80,19 +80,25 @@ export default function Leases() {
     load();
   }, []);
 
-  // Deep-link from the Properties page: open a new lease pre-assigned to a property.
+  // Deep-links: open a new lease pre-assigned to a property (?addForProperty=),
+  // or open a specific lease's detail (?view=) — used by the transaction links.
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     const pid = searchParams.get('addForProperty');
-    if (!pid) return;
-    setEditing({
-      status: 'Active',
-      escalation_pct: 3,
-      notice_period_months: 9,
-      property_id: Number(pid),
-    });
+    const viewId = searchParams.get('view');
+    if (!pid && !viewId) return;
+    if (pid) {
+      setEditing({
+        status: 'Active',
+        escalation_pct: 3,
+        notice_period_months: 9,
+        property_id: Number(pid),
+      });
+    }
+    if (viewId) setDetailId(Number(viewId));
     const next = new URLSearchParams(searchParams);
     next.delete('addForProperty');
+    next.delete('view');
     setSearchParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

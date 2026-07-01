@@ -57,6 +57,7 @@ export interface Transaction {
   id: number;
   name: string;
   property_id: number | null;
+  lease_id?: number | null; // linked lease (e.g. the lease a completed deal produced)
   type: string;
   stage: string;
   market: string;

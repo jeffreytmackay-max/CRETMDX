@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Property, Lease } from '../lib/types';
 import { num, usd, usdCompact, fmtDate } from '../lib/format';
@@ -75,6 +75,18 @@ export default function Properties() {
       n.has(id) ? n.delete(id) : n.add(id);
       return n;
     });
+
+  // Deep-link from a transaction: auto-expand a property's leases (?expand=).
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const id = searchParams.get('expand');
+    if (!id) return;
+    setExpanded((s) => new Set(s).add(Number(id)));
+    const next = new URLSearchParams(searchParams);
+    next.delete('expand');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // All leases assigned to each property (a property may have many).
   const leasesByProperty = useMemo(() => {

@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
-import type { Property, Transaction } from '../lib/types';
+import type { Property, Lease, Transaction } from '../lib/types';
 import { usdCompact, num, fmtDate } from '../lib/format';
 import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
 import { SortGroupBar } from '../components/SortGroupBar';
@@ -204,7 +205,11 @@ function rowToTxn(row: string[], fields: string[]): Partial<Transaction> {
 export default function Transactions() {
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
+  const [leases, setLeases] = useState<Lease[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const propName = useMemo(() => new Map(properties.map((p) => [p.id, p.name])), [properties]);
+  const leaseName = useMemo(() => new Map(leases.map((l) => [l.id, l.lease_name])), [leases]);
   const [editing, setEditing] = useState<Partial<Transaction> | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [view, setView] = useState<'board' | 'list'>('board');
@@ -225,11 +230,12 @@ export default function Transactions() {
   }, [txns, sortKey, sortDir, groupKey]);
 
   const load = async () => {
-    const [tRaw, p] = await Promise.all([api.transactions(), api.properties()]);
+    const [tRaw, p, l] = await Promise.all([api.transactions(), api.properties(), api.leases()]);
     // Prefer the cloud links value; fall back to the device-local copy.
     const t = tRaw.map((x) => ({ ...x, links: x.links || getLocalLinks(x.id) }));
     setTxns(t);
     setProperties(p);
+    setLeases(l);
     setLoading(false);
   };
   useEffect(() => {
@@ -384,6 +390,26 @@ export default function Transactions() {
                             {[t.space_type, t.market].filter(Boolean).join(' · ')}
                             {parseLinks(t.links).length > 0 && ` · 🔗 ${parseLinks(t.links).length}`}
                           </div>
+                          {(t.property_id || t.lease_id) && (
+                            <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                              {t.property_id && propName.get(t.property_id) && (
+                                <button
+                                  onClick={() => navigate(`/properties?expand=${t.property_id}`)}
+                                  className="text-blue-600 hover:underline"
+                                >
+                                  🏢 {propName.get(t.property_id)}
+                                </button>
+                              )}
+                              {t.lease_id && leaseName.get(t.lease_id) && (
+                                <button
+                                  onClick={() => navigate(`/leases?view=${t.lease_id}`)}
+                                  className="text-blue-600 hover:underline"
+                                >
+                                  📄 {leaseName.get(t.lease_id)}
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-slate-600">{t.type}</td>
                         <td className="px-4 py-3 text-slate-600">{t.stage}</td>
@@ -538,6 +564,7 @@ export default function Transactions() {
         <TxForm
           initial={editing}
           properties={properties}
+          leases={leases}
           onSave={save}
           onClose={() => setEditing(null)}
         />
@@ -681,11 +708,13 @@ function CsvImport({
 function TxForm({
   initial,
   properties,
+  leases,
   onSave,
   onClose,
 }: {
   initial: Partial<Transaction>;
   properties: Property[];
+  leases: Lease[];
   onSave: (t: Partial<Transaction>, files?: File[]) => void;
   onClose: () => void;
 }) {
@@ -806,6 +835,30 @@ function TxForm({
           <Field label="Region / Business Unit">
             <Input value={form.market || ''} onChange={(e) => set('market', e.target.value)} />
           </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Linked Lease">
+            <Select
+              value={form.lease_id ?? ''}
+              onChange={(e) => set('lease_id', e.target.value ? parseInt(e.target.value) : null)}
+            >
+              <option value="">— None —</option>
+              {(form.property_id
+                ? leases.filter((l) => l.property_id === form.property_id)
+                : leases
+              ).map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.lease_name}
+                  {l.property_name ? ` — ${l.property_name}` : ''}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {form.stage === 'Completed' && !form.lease_id && (
+            <div className="flex items-end pb-2 text-xs text-amber-600">
+              Tip: link the lease this completed transaction produced.
+            </div>
+          )}
         </div>
         <div className="grid grid-cols-3 gap-3">
           <Field label="Target SF">

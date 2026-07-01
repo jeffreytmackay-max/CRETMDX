@@ -24,7 +24,7 @@ const LEASE_COLS = [
   'currency', 'parking_spaces', 'parking_rate_monthly', 'notes',
 ];
 const TRANSACTION_COLS = [
-  'name', 'property_id', 'type', 'stage', 'market', 'target_sqft',
+  'name', 'property_id', 'lease_id', 'type', 'stage', 'market', 'target_sqft',
   'estimated_value', 'probability', 'broker', 'lead', 'start_date',
   'target_close_date', 'notes', 'links',
   'space_type', 'progress', 'date_needed_by', 'priority', 'assigned_to',

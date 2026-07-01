@@ -72,6 +72,7 @@ export function initSchema(): void {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       property_id INTEGER REFERENCES properties(id) ON DELETE SET NULL,
+      lease_id INTEGER REFERENCES leases(id) ON DELETE SET NULL,
       type TEXT DEFAULT 'New Lease',
       stage TEXT DEFAULT 'Prospecting',
       market TEXT,
