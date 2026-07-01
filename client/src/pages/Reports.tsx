@@ -620,8 +620,9 @@ function ObligationsReport({ rows }: { rows: ReturnType<typeof futureObligations
         </table>
       </Card>
       <p className="text-xs text-slate-500 print:hidden">
-        Projection applies each active lease's annual escalation and prorates partial years; it
-        reflects contractual base rent only (excludes OpEx, free rent, and TI).
+        Built from each lease's rent schedule: base rent starts at the rent-commencement date (no
+        rent during the free-rent period) and grows by each lease's escalation, so these totals tie
+        to the per-lease rent tables. Excludes OpEx and TI.
       </p>
     </div>
   );

@@ -1,4 +1,5 @@
 import type { Property, Lease, Transaction } from './types';
+import { buildLeaseCashflows } from './finance';
 
 // Pure report builders + CSV export helpers. All computed client-side from the
 // browser store so reports work offline and on the static site.
@@ -66,8 +67,12 @@ export interface ObligationRow {
   amount: number;
 }
 
-// Projects total contractual base rent by calendar year across active leases,
-// applying each lease's annual escalation and prorating partial years.
+// Projects net base rent actually owed by calendar year across active leases.
+// Built from each lease's own rent schedule (buildLeaseCashflows) so it ties to
+// the per-lease rent tables: escalation and — importantly — the free-rent /
+// rent-commencement period are respected (no rent is projected before rent
+// actually starts). Each lease-year is placed in the calendar year that starts
+// on its commencement anniversary.
 export function futureObligations(leases: Lease[], years = 10): ObligationRow[] {
   const now = new Date();
   const startYear = now.getFullYear();
@@ -76,21 +81,27 @@ export function futureObligations(leases: Lease[], years = 10): ObligationRow[] 
 
   for (const l of leases) {
     if (l.status !== 'Active' || !l.commencement_date || !l.expiration_date) continue;
-    const start = new Date(l.commencement_date);
+    const commencement = new Date(l.commencement_date);
     const end = new Date(l.expiration_date);
-    if (Number.isNaN(+start) || Number.isNaN(+end)) continue;
-    const monthly = (l.base_rent_annual || 0) / 12;
-    const esc = (l.escalation_pct || 0) / 100;
+    if (Number.isNaN(+commencement) || Number.isNaN(+end) || end <= commencement) continue;
 
-    const cur = new Date(Math.max(+start, new Date(startYear, 0, 1).getTime()));
-    cur.setDate(1);
-    while (cur <= end && cur.getFullYear() < startYear + years) {
-      const y = cur.getFullYear();
-      if (y >= startYear) {
-        const yearsSince = Math.max(0, Math.floor((+cur - +start) / (365.25 * 24 * 3600 * 1000)));
-        totals[y] += monthly * Math.pow(1 + esc, yearsSince);
-      }
-      cur.setMonth(cur.getMonth() + 1);
+    const termYears = Math.max(
+      1,
+      Math.round((+end - +commencement) / (365.25 * 24 * 3600 * 1000)),
+    );
+    const rows = buildLeaseCashflows({
+      rentableSqft: l.rentable_sqft || 0,
+      baseRentAnnual: l.base_rent_annual || 0,
+      escalationPct: l.escalation_pct || 0,
+      opexPsf: 0,
+      freeRentMonths: l.free_rent_months || 0,
+      tiAllowancePsf: 0,
+      termYears,
+      discountRate: 0,
+    });
+    for (const r of rows) {
+      const cy = commencement.getFullYear() + (r.year - 1);
+      if (cy in totals) totals[cy] += Math.max(0, r.baseRent - r.freeRent);
     }
   }
   return Object.entries(totals).map(([year, amount]) => ({ year: Number(year), amount }));
