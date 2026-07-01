@@ -3,9 +3,14 @@ import { signIn, signUp } from '../lib/auth';
 import { Brand } from '../components/Logo';
 import { Button, Field, Input } from '../components/ui';
 
+// Set to true to let the public create their own accounts from this screen.
+// When false (default), accounts are created by an administrator in the Supabase
+// dashboard, so access is approval-only. Also turn public sign-ups off in
+// Supabase → Authentication → Providers → Email to enforce this on the server.
+const ALLOW_SIGNUP = false;
+
 // Full-screen sign-in gate shown when the cloud backend is configured but no
-// user is authenticated. Sign-up is available but an admin can disable open
-// sign-ups in the Supabase dashboard to keep the portfolio private.
+// user is authenticated.
 export default function Login() {
   const [mode, setMode] = useState<'in' | 'up'>('in');
   const [email, setEmail] = useState('');
@@ -52,6 +57,12 @@ export default function Login() {
               ? 'Sign in to access the shared portfolio.'
               : 'Create an account to access the shared portfolio.'}
           </p>
+          {mode === 'in' && !ALLOW_SIGNUP && (
+            <p className="mb-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500">
+              Access is by invitation. If you need an account, contact your
+              administrator to have one created for you.
+            </p>
+          )}
           <form className="space-y-3" onSubmit={submit}>
             <Field label="Email">
               <Input
@@ -77,17 +88,19 @@ export default function Login() {
               {busy ? 'Please wait…' : mode === 'in' ? 'Sign in' : 'Create account'}
             </Button>
           </form>
-          <div className="mt-4 text-center text-sm text-slate-500">
-            {mode === 'in' ? (
-              <button className="font-medium text-blue-600" onClick={() => setMode('up')}>
-                Need an account? Create one
-              </button>
-            ) : (
-              <button className="font-medium text-blue-600" onClick={() => setMode('in')}>
-                Already have an account? Sign in
-              </button>
-            )}
-          </div>
+          {ALLOW_SIGNUP && (
+            <div className="mt-4 text-center text-sm text-slate-500">
+              {mode === 'in' ? (
+                <button className="font-medium text-blue-600" onClick={() => setMode('up')}>
+                  Need an account? Create one
+                </button>
+              ) : (
+                <button className="font-medium text-blue-600" onClick={() => setMode('in')}>
+                  Already have an account? Sign in
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
