@@ -10,7 +10,7 @@ import {
 } from 'recharts';
 import { api } from '../lib/api';
 import type { Property, Lease, Transaction } from '../lib/types';
-import { usd, usdCompact, num, fmtDate } from '../lib/format';
+import { usd, usdCompact, num, fmtDate, monthsUntil } from '../lib/format';
 import {
   rentRoll,
   expirationSchedule,
@@ -23,12 +23,20 @@ import {
 import { Button, Card, Select, SectionTitle, Spinner, StatCard } from '../components/ui';
 import { Monogram } from '../components/Logo';
 
-type ReportKey = 'summary' | 'rentroll' | 'expirations' | 'obligations' | 'critical' | 'pipeline';
+type ReportKey =
+  | 'summary'
+  | 'rentroll'
+  | 'expirations'
+  | 'gantt'
+  | 'obligations'
+  | 'critical'
+  | 'pipeline';
 
 const REPORTS: { key: ReportKey; label: string }[] = [
   { key: 'summary', label: 'Portfolio Summary' },
   { key: 'rentroll', label: 'Rent Roll' },
   { key: 'expirations', label: 'Lease Expirations' },
+  { key: 'gantt', label: 'Lease Timeline' },
   { key: 'obligations', label: 'Rent Obligations' },
   { key: 'critical', label: 'Critical Dates' },
   { key: 'pipeline', label: 'Deal Pipeline' },
@@ -84,10 +92,14 @@ export default function Reports() {
   );
   const filteredLeases = useMemo(() => {
     const ids = new Set(filteredProperties.map((p) => p.id));
-    return leases.filter(
-      (l) => ids.has(l.property_id) && (fStatus === 'All' || l.status === fStatus),
-    );
-  }, [leases, filteredProperties, fStatus]);
+    return leases.filter((l) => {
+      if (fStatus !== 'All' && l.status !== fStatus) return false;
+      // With no property-level filter, include every lease (even unassigned);
+      // with a filter active, keep only leases on matching properties.
+      if (!propFilterActive) return true;
+      return l.property_id != null && ids.has(l.property_id);
+    });
+  }, [leases, filteredProperties, fStatus, propFilterActive]);
   const filteredTransactions = useMemo(() => {
     if (!propFilterActive) return transactions;
     const ids = new Set(filteredProperties.map((p) => p.id));
@@ -125,6 +137,24 @@ export default function Reports() {
       downloadCsv(
         'lease-expirations.csv',
         toCsv(['Year', 'Leases Expiring', 'Rentable SF', 'Annual Rent'], data.exp.map((r) => [r.year, r.count, r.sqft, Math.round(r.annualRent)])),
+      );
+    } else if (report === 'gantt') {
+      const rows = [...filteredLeases]
+        .filter((l) => l.expiration_date)
+        .sort((a, b) => (a.expiration_date || '').localeCompare(b.expiration_date || ''));
+      downloadCsv(
+        'lease-timeline.csv',
+        toCsv(
+          ['Lease', 'Property', 'Commencement', 'Expiration', 'Months to Expiry', 'Status'],
+          rows.map((l) => [
+            l.lease_name,
+            l.property_name || '',
+            l.commencement_date || '',
+            l.expiration_date || '',
+            monthsUntil(l.expiration_date),
+            l.status,
+          ]),
+        ),
       );
     } else if (report === 'obligations') {
       downloadCsv(
@@ -229,6 +259,7 @@ export default function Reports() {
       )}
       {report === 'rentroll' && <RentRollReport rows={data.roll} />}
       {report === 'expirations' && <ExpirationsReport rows={data.exp} />}
+      {report === 'gantt' && <LeaseGanttReport leases={filteredLeases} />}
       {report === 'obligations' && <ObligationsReport rows={data.obl} />}
       {report === 'critical' && <CriticalReport rows={data.crit} />}
       {report === 'pipeline' && <PipelineReport rows={data.pipe} />}
@@ -238,6 +269,138 @@ export default function Reports() {
         TransMedics — Real Estate Portfolio · Confidential · Generated {today}
       </div>
     </div>
+  );
+}
+
+// Color a lease bar by how soon it expires.
+function expiryColor(exp?: string): string {
+  const m = monthsUntil(exp || '');
+  if (m < 0) return '#94a3b8'; // expired — slate
+  if (m <= 12) return '#9D2235'; // ≤ 1 yr — crimson
+  if (m <= 24) return '#FF7F41'; // ≤ 2 yrs — coral
+  return '#2E7D52'; // > 2 yrs — green
+}
+
+function GanttLegend({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="inline-block h-3 w-4 rounded" style={{ background: color }} />
+      {label}
+    </span>
+  );
+}
+
+// Horizontal Gantt of lease terms, each bar spanning commencement → expiration on
+// a shared year axis, colored by time-to-expiry, with a "today" marker.
+function LeaseGanttReport({ leases }: { leases: Lease[] }) {
+  const rows = leases
+    .map((l) => ({ l, start: +new Date(l.commencement_date), end: +new Date(l.expiration_date) }))
+    .filter((r) => !Number.isNaN(r.start) && !Number.isNaN(r.end) && r.end > r.start)
+    .sort((a, b) => a.end - b.end);
+
+  if (rows.length === 0) {
+    return (
+      <Card className="p-5">
+        <SectionTitle>Lease Timeline</SectionTitle>
+        <p className="text-sm text-slate-500">
+          No leases with both a commencement and expiration date to chart. Add those dates to a
+          lease to see it here.
+        </p>
+      </Card>
+    );
+  }
+
+  const today = new Date().getTime();
+  const minMs = Math.min(today, ...rows.map((r) => r.start));
+  const maxMs = Math.max(today, ...rows.map((r) => r.end));
+  const span = maxMs - minMs || 1;
+  const pct = (ms: number) => ((ms - minMs) / span) * 100;
+
+  const startYear = new Date(minMs).getFullYear();
+  const endYear = new Date(maxMs).getFullYear();
+  const years: number[] = [];
+  for (let y = startYear; y <= endYear + 1; y++) years.push(y);
+  const yearMs = (y: number) => +new Date(y, 0, 1);
+  const LABEL_W = 200;
+
+  return (
+    <Card className="p-5">
+      <SectionTitle>Lease Timeline</SectionTitle>
+      <div className="overflow-x-auto scroll-touch">
+        <div className="min-w-[760px]">
+          {/* Year axis */}
+          <div className="relative h-5" style={{ marginLeft: LABEL_W }}>
+            {years.map((y) => {
+              const left = pct(yearMs(y));
+              if (left < 0 || left > 100) return null;
+              return (
+                <span
+                  key={y}
+                  className="absolute -translate-x-1/2 text-[10px] text-slate-400"
+                  style={{ left: `${left}%` }}
+                >
+                  {y}
+                </span>
+              );
+            })}
+          </div>
+
+          <div className="relative border-t border-slate-200">
+            {/* Gridlines + today marker behind the bars */}
+            <div className="pointer-events-none absolute inset-0" style={{ marginLeft: LABEL_W }}>
+              {years.map((y) => {
+                const left = pct(yearMs(y));
+                if (left < 0 || left > 100) return null;
+                return (
+                  <div
+                    key={y}
+                    className="absolute bottom-0 top-0 w-px bg-slate-100"
+                    style={{ left: `${left}%` }}
+                  />
+                );
+              })}
+              <div
+                className="absolute bottom-0 top-0 w-0.5 bg-blue-500/70"
+                style={{ left: `${pct(today)}%` }}
+                title="Today"
+              />
+            </div>
+
+            {rows.map(({ l, start, end }) => (
+              <div key={l.id} className="relative flex items-center border-b border-slate-50 py-1.5">
+                <div className="shrink-0 pr-3" style={{ width: LABEL_W }}>
+                  <div className="truncate text-xs font-medium text-slate-700">{l.lease_name}</div>
+                  <div className="truncate text-[10px] text-slate-400">{l.property_name}</div>
+                </div>
+                <div className="relative h-5 flex-1">
+                  <div
+                    className="absolute top-1/2 h-3 -translate-y-1/2 rounded"
+                    style={{
+                      left: `${pct(start)}%`,
+                      width: `${Math.max(0.6, pct(end) - pct(start))}%`,
+                      background: expiryColor(l.expiration_date),
+                    }}
+                    title={`${l.lease_name}: ${fmtDate(l.commencement_date)} → ${fmtDate(
+                      l.expiration_date,
+                    )}`}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-500">
+        <GanttLegend color="#9D2235" label="≤ 1 yr to expiry" />
+        <GanttLegend color="#FF7F41" label="≤ 2 yrs" />
+        <GanttLegend color="#2E7D52" label="> 2 yrs" />
+        <GanttLegend color="#94a3b8" label="Expired" />
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-0.5 bg-blue-500/70" /> Today
+        </span>
+      </div>
+    </Card>
   );
 }
 
