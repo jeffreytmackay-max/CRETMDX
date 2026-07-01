@@ -310,6 +310,9 @@ export default function Transactions() {
               </button>
             ))}
           </div>
+          <Button variant="ghost" onClick={() => setImporting(true)}>
+            ⤒ Import CSV
+          </Button>
           <Button
             onClick={() =>
               setEditing({
@@ -328,7 +331,7 @@ export default function Transactions() {
 
       {view === 'list' && (
         <div className="flex-1 overflow-y-auto scroll-touch p-4 md:p-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-4">
             <SortGroupBar
               sortKey={sortKey}
               setSortKey={setSortKey}
@@ -339,9 +342,6 @@ export default function Transactions() {
               sortChoices={TX_SORTS}
               groupChoices={TX_GROUPS}
             />
-            <Button variant="ghost" onClick={() => setImporting(true)}>
-              ⤒ Import CSV
-            </Button>
           </div>
           <Card className="overflow-x-auto scroll-touch">
             <table className="w-full min-w-[900px] text-sm">
