@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -14,6 +14,7 @@ import { usd, usdCompact, num, fmtDate, monthsUntil } from '../lib/format';
 import {
   rentRoll,
   expirationSchedule,
+  expirationByRegion,
   futureObligations,
   criticalDates,
   pipelineByStage,
@@ -126,6 +127,7 @@ export default function Reports() {
     () => ({
       roll: rentRoll(filteredProperties, filteredLeases),
       exp: expirationSchedule(filteredLeases),
+      expRegion: expirationByRegion(filteredProperties, filteredLeases),
       obl: futureObligations(filteredLeases, 10),
       crit: criticalDates(filteredProperties, filteredLeases, 24),
       pipe: pipelineByStage(filteredTransactions),
@@ -138,14 +140,19 @@ export default function Reports() {
       downloadCsv(
         'rent-roll.csv',
         toCsv(
-          ['Lease', 'Property', 'State', 'Type', 'Rentable SF', 'Base Rent/yr', 'Rent/SF', 'OpEx/SF', 'Commencement', 'Expiration', 'Status'],
-          data.roll.map((r) => [r.lease, r.property, r.state, r.type, r.sqft, Math.round(r.baseRentAnnual), r.rentPsf.toFixed(2), r.opexPsf.toFixed(2), r.commencement, r.expiration, r.status]),
+          ['Region', 'Lease', 'Property', 'State', 'Type', 'Rentable SF', 'Base Rent/yr', 'Rent/SF', 'OpEx/SF', 'Commencement', 'Expiration', 'Status'],
+          data.roll.map((r) => [r.region, r.lease, r.property, r.state, r.type, r.sqft, Math.round(r.baseRentAnnual), r.rentPsf.toFixed(2), r.opexPsf.toFixed(2), r.commencement, r.expiration, r.status]),
         ),
       );
     } else if (report === 'expirations') {
       downloadCsv(
         'lease-expirations.csv',
-        toCsv(['Year', 'Leases Expiring', 'Rentable SF', 'Annual Rent'], data.exp.map((r) => [r.year, r.count, r.sqft, Math.round(r.annualRent)])),
+        toCsv(
+          ['Region', 'Year', 'Leases Expiring', 'Rentable SF', 'Annual Rent'],
+          data.expRegion.flatMap((g) =>
+            g.rows.map((r) => [g.region, r.year, r.count, r.sqft, Math.round(r.annualRent)]),
+          ),
+        ),
       );
     } else if (report === 'gantt') {
       const rows = [...filteredLeases]
@@ -269,7 +276,9 @@ export default function Reports() {
         <SummaryReport properties={filteredProperties} leases={filteredLeases} data={data} />
       )}
       {report === 'rentroll' && <RentRollReport rows={data.roll} />}
-      {report === 'expirations' && <ExpirationsReport rows={data.exp} />}
+      {report === 'expirations' && (
+        <ExpirationsReport rows={data.exp} groups={data.expRegion} />
+      )}
       {report === 'gantt' && <LeaseGanttReport leases={filteredLeases} />}
       {report === 'obligations' && <ObligationsReport rows={data.obl} />}
       {report === 'critical' && <CriticalReport rows={data.crit} />}
@@ -576,18 +585,46 @@ function SummaryReport({
 function RentRollReport({ rows }: { rows: ReturnType<typeof rentRoll> }) {
   const totalSqft = rows.reduce((s, r) => s + r.sqft, 0);
   const totalRent = rows.reduce((s, r) => s + r.baseRentAnnual, 0);
+
+  // Group rows by region, in region order (rows keep their expiration sort).
+  const byRegion = new Map<string, typeof rows>();
+  for (const r of rows) {
+    if (!byRegion.has(r.region)) byRegion.set(r.region, []);
+    byRegion.get(r.region)!.push(r);
+  }
+  const groups = [...REGIONS, 'Other']
+    .filter((r) => byRegion.has(r))
+    .map((region) => ({ region, rows: byRegion.get(region)! }));
+
   return (
     <Card className="overflow-x-auto scroll-touch p-0">
       <table className="w-full min-w-[820px] text-sm">
         <thead><tr className="border-b border-slate-200"><Th>Lease</Th><Th>State</Th><Th right>SF</Th><Th right>Base Rent/yr</Th><Th right>Rent/SF</Th><Th>Expiration</Th><Th>Status</Th></tr></thead>
         <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} className="border-b border-slate-100">
-              <Td><span className="font-medium text-slate-800">{r.lease}</span><div className="text-xs text-slate-400">{r.property}</div></Td>
-              <Td>{r.state}</Td><Td right>{num(r.sqft)}</Td><Td right>{usd(r.baseRentAnnual)}</Td>
-              <Td right>{usd(r.rentPsf, 2)}</Td><Td>{fmtDate(r.expiration)}</Td><Td>{r.status}</Td>
-            </tr>
-          ))}
+          {groups.map((g) => {
+            const gSqft = g.rows.reduce((s, r) => s + r.sqft, 0);
+            const gRent = g.rows.reduce((s, r) => s + r.baseRentAnnual, 0);
+            return (
+              <Fragment key={g.region}>
+                <tr className="bg-slate-50/70">
+                  <td colSpan={7} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {g.region} <span className="text-slate-400">· {g.rows.length} leases</span>
+                  </td>
+                </tr>
+                {g.rows.map((r, i) => (
+                  <tr key={i} className="border-b border-slate-100">
+                    <Td><span className="font-medium text-slate-800">{r.lease}</span><div className="text-xs text-slate-400">{r.property}</div></Td>
+                    <Td>{r.state}</Td><Td right>{num(r.sqft)}</Td><Td right>{usd(r.baseRentAnnual)}</Td>
+                    <Td right>{usd(r.rentPsf, 2)}</Td><Td>{fmtDate(r.expiration)}</Td><Td>{r.status}</Td>
+                  </tr>
+                ))}
+                <tr className="border-b border-slate-200 bg-slate-50/40 text-slate-600">
+                  <Td>{g.region} subtotal</Td><Td>—</Td><Td right>{num(gSqft)}</Td><Td right>{usd(gRent)}</Td>
+                  <Td right>{usd(gSqft ? gRent / gSqft : 0, 2)}</Td><Td>—</Td><Td>—</Td>
+                </tr>
+              </Fragment>
+            );
+          })}
           <tr className="border-t-2 border-slate-300 bg-slate-50">
             <Td bold>Total · {rows.length} leases</Td><Td>—</Td><Td right bold>{num(totalSqft)}</Td><Td right bold>{usd(totalRent)}</Td>
             <Td right bold>{usd(totalSqft ? totalRent / totalSqft : 0, 2)}</Td><Td>—</Td><Td>—</Td>
@@ -598,7 +635,13 @@ function RentRollReport({ rows }: { rows: ReturnType<typeof rentRoll> }) {
   );
 }
 
-function ExpirationsReport({ rows }: { rows: ReturnType<typeof expirationSchedule> }) {
+function ExpirationsReport({
+  rows,
+  groups,
+}: {
+  rows: ReturnType<typeof expirationSchedule>;
+  groups: ReturnType<typeof expirationByRegion>;
+}) {
   return (
     <div className="space-y-6">
       <Card className="p-5 print:hidden">
@@ -617,12 +660,24 @@ function ExpirationsReport({ rows }: { rows: ReturnType<typeof expirationSchedul
       </Card>
       <Card className="overflow-x-auto p-0">
         <table className="w-full text-sm">
-          <thead><tr className="border-b border-slate-200"><Th>Year</Th><Th right>Leases Expiring</Th><Th right>Rentable SF</Th><Th right>Annual Rent at Risk</Th></tr></thead>
+          <thead><tr className="border-b border-slate-200"><Th>Region / Year</Th><Th right>Leases Expiring</Th><Th right>Rentable SF</Th><Th right>Annual Rent at Risk</Th></tr></thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.year} className="border-b border-slate-100"><Td bold>{r.year}</Td><Td right>{r.count}</Td><Td right>{num(r.sqft)}</Td><Td right>{usd(r.annualRent)}</Td></tr>
+            {groups.map((g) => (
+              <Fragment key={g.region}>
+                <tr className="bg-slate-50/70">
+                  <td colSpan={4} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {g.region}
+                  </td>
+                </tr>
+                {g.rows.map((r) => (
+                  <tr key={r.year} className="border-b border-slate-100"><Td bold>{r.year}</Td><Td right>{r.count}</Td><Td right>{num(r.sqft)}</Td><Td right>{usd(r.annualRent)}</Td></tr>
+                ))}
+                <tr className="border-b border-slate-200 bg-slate-50/40 text-slate-600">
+                  <Td>{g.region} subtotal</Td><Td right>{g.total.count}</Td><Td right>{num(g.total.sqft)}</Td><Td right>{usd(g.total.annualRent)}</Td>
+                </tr>
+              </Fragment>
             ))}
-            {rows.length === 0 && <tr><Td>No active lease expirations on record.</Td></tr>}
+            {groups.length === 0 && <tr><Td>No active lease expirations on record.</Td></tr>}
           </tbody>
         </table>
       </Card>

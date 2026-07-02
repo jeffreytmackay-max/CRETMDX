@@ -1,5 +1,6 @@
 import type { Property, Lease, Transaction } from './types';
 import { buildLeaseCashflows, effectiveFreeMonths } from './finance';
+import { regionForCountry, REGIONS } from './geo';
 
 // Pure report builders + CSV export helpers. All computed client-side from the
 // browser store so reports work offline and on the static site.
@@ -8,6 +9,7 @@ export interface RentRollRow {
   lease: string;
   property: string;
   state: string;
+  region: string;
   type: string;
   sqft: number;
   baseRentAnnual: number;
@@ -27,6 +29,7 @@ export function rentRoll(properties: Property[], leases: Lease[]): RentRollRow[]
         lease: l.lease_name,
         property: p?.name || l.property_name || '—',
         state: p?.state || l.property_state || '—',
+        region: regionForCountry(p?.country),
         type: `${l.role} · ${l.lease_type}`,
         sqft: l.rentable_sqft || 0,
         baseRentAnnual: l.base_rent_annual || 0,
@@ -60,6 +63,42 @@ export function expirationSchedule(leases: Lease[]): ExpirationYearRow[] {
     map.set(year, row);
   }
   return [...map.values()].sort((a, b) => a.year - b.year);
+}
+
+export interface ExpirationRegionGroup {
+  region: string;
+  rows: ExpirationYearRow[];
+  total: { count: number; sqft: number; annualRent: number };
+}
+
+// Lease-expiration schedule split by region, in region order. Regions with no
+// active expirations are omitted.
+export function expirationByRegion(
+  properties: Property[],
+  leases: Lease[],
+): ExpirationRegionGroup[] {
+  const byId = new Map(properties.map((p) => [p.id, p]));
+  const groups = new Map<string, Lease[]>();
+  for (const l of leases) {
+    const region = regionForCountry(byId.get(l.property_id)?.country);
+    if (!groups.has(region)) groups.set(region, []);
+    groups.get(region)!.push(l);
+  }
+  return [...REGIONS, 'Other']
+    .filter((r) => groups.has(r))
+    .map((region) => {
+      const rows = expirationSchedule(groups.get(region)!);
+      const total = rows.reduce(
+        (t, r) => ({
+          count: t.count + r.count,
+          sqft: t.sqft + r.sqft,
+          annualRent: t.annualRent + r.annualRent,
+        }),
+        { count: 0, sqft: 0, annualRent: 0 },
+      );
+      return { region, rows, total };
+    })
+    .filter((g) => g.rows.length > 0);
 }
 
 export interface ObligationRow {

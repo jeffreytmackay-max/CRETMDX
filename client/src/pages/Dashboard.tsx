@@ -27,6 +27,7 @@ const TIP_KEY = 'cretmdx:hideDataTip';
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [error, setError] = useState<string>();
+  const [mixBy, setMixBy] = useState<'type' | 'region'>('type');
   const [showTip, setShowTip] = useState(() => {
     try {
       return localStorage.getItem(TIP_KEY) !== '1';
@@ -60,6 +61,14 @@ export default function Dashboard() {
     }))
     .filter((r) => r.count > 0);
   const maxRegionCount = Math.max(1, ...regionRows.map((r) => r.count));
+
+  // Portfolio Mix pie — switchable between property type and region.
+  const mixData =
+    mixBy === 'region'
+      ? regionRows.map((r) => ({ name: r.region, value: r.count }))
+      : typeData;
+  const mixColor = (name: string, i: number) =>
+    mixBy === 'region' ? REGION_COLOR[name] || '#75787B' : TYPE_COLORS[i % TYPE_COLORS.length];
   const rentByYear = data.criticalDates.slice(0, 6).map((d) => ({
     name: d.leaseName.split('—')[0].trim().slice(0, 14),
     days: Math.max(0, daysUntil(d.date)),
@@ -175,13 +184,31 @@ export default function Dashboard() {
         </Card>
 
         <Card className="p-5">
-          <SectionTitle>Portfolio Mix</SectionTitle>
+          <SectionTitle
+            action={
+              <div className="flex items-center gap-1 rounded-full bg-slate-100 p-0.5 text-xs">
+                {(['type', 'region'] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMixBy(m)}
+                    className={`rounded-full px-2.5 py-1 font-medium capitalize transition ${
+                      mixBy === m ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            }
+          >
+            Portfolio Mix
+          </SectionTitle>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={typeData} dataKey="value" nameKey="name" outerRadius={80} label>
-                  {typeData.map((_, i) => (
-                    <Cell key={i} fill={TYPE_COLORS[i % TYPE_COLORS.length]} />
+                <Pie data={mixData} dataKey="value" nameKey="name" outerRadius={80} label>
+                  {mixData.map((d, i) => (
+                    <Cell key={i} fill={mixColor(d.name, i)} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -189,11 +216,11 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
-            {typeData.map((t, i) => (
+            {mixData.map((t, i) => (
               <span key={t.name} className="flex items-center gap-1.5 text-xs text-slate-600">
                 <span
                   className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ background: TYPE_COLORS[i % TYPE_COLORS.length] }}
+                  style={{ background: mixColor(t.name, i) }}
                 />
                 {t.name} ({t.value})
               </span>
