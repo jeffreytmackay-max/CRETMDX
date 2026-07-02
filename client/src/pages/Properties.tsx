@@ -21,7 +21,7 @@ import { useColumns, type ColumnDef } from '../lib/columns';
 import { customColumns } from '../lib/tableColumns';
 import { getFieldDefs } from '../lib/fields';
 import type { FieldDef } from '../lib/types';
-import { COUNTRIES, statesFor } from '../lib/geo';
+import { COUNTRIES, statesFor, regionForCountry, REGIONS } from '../lib/geo';
 
 const PROPERTY_TYPES = [
   'Headquarters',
@@ -36,6 +36,7 @@ const OWNERSHIP_TYPES = ['Leased', 'Owned', 'Condo'];
 const SORTS: SortOption<Property>[] = [
   { key: 'name', label: 'Name', get: (p) => p.name || '' },
   { key: 'location', label: 'Location', get: (p) => `${p.state || ''} ${p.city || ''}` },
+  { key: 'region', label: 'Region', get: (p) => regionForCountry(p.country) },
   { key: 'property_type', label: 'Type', get: (p) => p.property_type || '' },
   { key: 'ownership', label: 'Ownership', get: (p) => p.ownership || '' },
   { key: 'rentable_sqft', label: 'Rentable SF', get: (p) => p.rentable_sqft || 0 },
@@ -43,6 +44,12 @@ const SORTS: SortOption<Property>[] = [
 ];
 const GROUPS: GroupOption<Property>[] = [
   { key: 'none', label: 'None', get: () => '' },
+  {
+    key: 'region',
+    label: 'Region',
+    get: (p) => regionForCountry(p.country),
+    order: [...REGIONS, 'Other'],
+  },
   { key: 'property_type', label: 'Type', get: (p) => p.property_type || '—' },
   { key: 'ownership', label: 'Ownership', get: (p) => p.ownership || '—' },
   { key: 'state', label: 'State', get: (p) => p.state || '—' },
@@ -173,6 +180,12 @@ export default function Properties() {
             <div className="text-xs text-slate-400">{p.country}</div>
           </>
         ),
+      },
+      {
+        key: 'region',
+        label: 'Region',
+        group: 'This tab',
+        render: (p) => regionForCountry(p.country),
       },
       {
         key: 'type',
@@ -651,6 +664,9 @@ function PropertyForm({
                 <option key={c}>{c}</option>
               ))}
             </Select>
+            <span className="mt-1 block text-xs text-slate-400">
+              Region: {regionForCountry(form.country)}
+            </span>
           </Field>
           <Field label="Ownership">
             <Select value={form.ownership} onChange={(e) => set('ownership', e.target.value)}>

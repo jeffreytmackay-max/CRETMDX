@@ -57,3 +57,98 @@ const STATES_BY_COUNTRY: Record<string, string[]> = {
 export function statesFor(country?: string): string[] | null {
   return (country && STATES_BY_COUNTRY[country]) || null;
 }
+
+// ---- Regional structure ----
+// Portfolio-wide regions, derived from each property's country so the grouping
+// stays consistent and updates automatically when a country changes.
+export const REGIONS: string[] = [
+  'North America',
+  'South America',
+  'Europe',
+  'Middle East',
+  'Africa',
+  'Asia/Pacific',
+];
+
+// A few assignments are judgment calls (noted): Mexico + Central America →
+// North America; Egypt → Africa; Turkey → Middle East. Adjust here if your
+// corporate structure groups them differently.
+const REGION_BY_COUNTRY: Record<string, string> = {
+  // North America (incl. Central America)
+  USA: 'North America',
+  Canada: 'North America',
+  Mexico: 'North America',
+  'Costa Rica': 'North America',
+  Panama: 'North America',
+  // South America
+  Brazil: 'South America',
+  Argentina: 'South America',
+  Chile: 'South America',
+  Colombia: 'South America',
+  Peru: 'South America',
+  // Europe
+  'United Kingdom': 'Europe',
+  Ireland: 'Europe',
+  France: 'Europe',
+  Germany: 'Europe',
+  Italy: 'Europe',
+  Spain: 'Europe',
+  Portugal: 'Europe',
+  Netherlands: 'Europe',
+  Belgium: 'Europe',
+  Luxembourg: 'Europe',
+  Switzerland: 'Europe',
+  Austria: 'Europe',
+  Denmark: 'Europe',
+  Sweden: 'Europe',
+  Norway: 'Europe',
+  Finland: 'Europe',
+  Iceland: 'Europe',
+  Poland: 'Europe',
+  'Czech Republic': 'Europe',
+  Slovakia: 'Europe',
+  Hungary: 'Europe',
+  Romania: 'Europe',
+  Bulgaria: 'Europe',
+  Greece: 'Europe',
+  Croatia: 'Europe',
+  Slovenia: 'Europe',
+  Serbia: 'Europe',
+  Ukraine: 'Europe',
+  Estonia: 'Europe',
+  Latvia: 'Europe',
+  Lithuania: 'Europe',
+  // Middle East
+  Turkey: 'Middle East',
+  Israel: 'Middle East',
+  'United Arab Emirates': 'Middle East',
+  'Saudi Arabia': 'Middle East',
+  Qatar: 'Middle East',
+  // Africa
+  Egypt: 'Africa',
+  'South Africa': 'Africa',
+  Nigeria: 'Africa',
+  Kenya: 'Africa',
+  Morocco: 'Africa',
+  // Asia / Pacific
+  Australia: 'Asia/Pacific',
+  'New Zealand': 'Asia/Pacific',
+  Japan: 'Asia/Pacific',
+  China: 'Asia/Pacific',
+  'Hong Kong': 'Asia/Pacific',
+  Taiwan: 'Asia/Pacific',
+  'South Korea': 'Asia/Pacific',
+  Singapore: 'Asia/Pacific',
+  Malaysia: 'Asia/Pacific',
+  Thailand: 'Asia/Pacific',
+  Vietnam: 'Asia/Pacific',
+  Philippines: 'Asia/Pacific',
+  Indonesia: 'Asia/Pacific',
+  India: 'Asia/Pacific',
+  Pakistan: 'Asia/Pacific',
+};
+
+// The region for a country, or 'Other' when unmapped/blank.
+export function regionForCountry(country?: string): string {
+  return (country && REGION_BY_COUNTRY[country]) || 'Other';
+}
