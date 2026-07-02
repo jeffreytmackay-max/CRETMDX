@@ -7,8 +7,9 @@ import type { Property } from '../lib/types';
 import { num } from '../lib/format';
 import { Card, Spinner } from '../components/ui';
 import { VectorBasemap } from '../components/VectorBasemap';
+import { regionForCountry, REGIONS } from '../lib/geo';
 
-import { PROPERTY_TYPE_COLOR as TYPE_COLOR } from '../lib/brand';
+import { PROPERTY_TYPE_COLOR as TYPE_COLOR, REGION_COLOR } from '../lib/brand';
 
 function markerIcon(color: string) {
   return L.divIcon({
@@ -44,6 +45,7 @@ export default function MapView() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState<string>('All');
+  const [colorBy, setColorBy] = useState<'type' | 'region'>('type');
   // The bundled vector basemap always renders. Street tiles are an opt-in
   // enhancement (off by default) because some networks block the tile CDN; we
   // track whether they actually loaded so we can flag it if they don't.
@@ -75,6 +77,22 @@ export default function MapView() {
   const mappable = filtered.filter(hasCoords);
   const missing = filtered.length - mappable.length;
 
+  const colorFor = (p: Property) =>
+    colorBy === 'region'
+      ? REGION_COLOR[regionForCountry(p.country)] || '#75787B'
+      : TYPE_COLOR[p.property_type] || '#75787B';
+
+  // Legend entries for the active color mode (only regions that actually appear).
+  const legend =
+    colorBy === 'region'
+      ? (() => {
+          const present = new Set(properties.map((p) => regionForCountry(p.country)));
+          return [...REGIONS, 'Other']
+            .filter((r) => present.has(r))
+            .map((r) => [r, REGION_COLOR[r]] as [string, string]);
+        })()
+      : (Object.entries(TYPE_COLOR) as [string, string][]);
+
   if (loading) return <Spinner label="Loading map…" />;
 
   return (
@@ -105,6 +123,20 @@ export default function MapView() {
               {t}
             </button>
           ))}
+          <div className="flex items-center gap-1 rounded-full bg-slate-100 p-0.5">
+            <span className="pl-2 pr-1 text-xs text-slate-400">Color:</span>
+            {(['type', 'region'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setColorBy(mode)}
+                className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize transition ${
+                  colorBy === mode ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
           <button
             onClick={() => {
               setShowStreets((v) => !v);
@@ -142,7 +174,7 @@ export default function MapView() {
             <Marker
               key={p.id}
               position={[Number(p.lat), Number(p.lng)]}
-              icon={markerIcon(TYPE_COLOR[p.property_type] || '#75787B')}
+              icon={markerIcon(colorFor(p))}
             >
               <Popup>
                 <div className="min-w-[180px]">
@@ -175,15 +207,17 @@ export default function MapView() {
         </MapContainer>
 
         <Card className="absolute bottom-6 left-6 z-[500] p-3">
-          <div className="mb-1.5 text-xs font-semibold text-slate-700">Property Type</div>
+          <div className="mb-1.5 text-xs font-semibold text-slate-700">
+            {colorBy === 'region' ? 'Region' : 'Property Type'}
+          </div>
           <div className="space-y-1">
-            {Object.entries(TYPE_COLOR).map(([type, color]) => (
-              <div key={type} className="flex items-center gap-2 text-xs text-slate-600">
+            {legend.map(([label, color]) => (
+              <div key={label} className="flex items-center gap-2 text-xs text-slate-600">
                 <span
                   className="inline-block h-3 w-3 rounded-full border border-white"
                   style={{ background: color }}
                 />
-                {type}
+                {label}
               </div>
             ))}
           </div>

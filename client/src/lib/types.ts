@@ -110,6 +110,8 @@ export interface DashboardData {
   weightedPipeline: number;
   criticalDates: { leaseId: number; leaseName: string; type: string; date: string }[];
   propertiesByType: Record<string, number>;
+  propertiesByRegion: Record<string, number>;
+  sqftByRegion: Record<string, number>;
 }
 
 export interface ScheduleRow {

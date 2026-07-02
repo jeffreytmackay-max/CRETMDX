@@ -16,8 +16,9 @@ import type { DashboardData } from '../lib/types';
 import { usd, usdCompact, num, fmtDate, daysUntil } from '../lib/format';
 import { Card, StatCard, SectionTitle, Spinner } from '../components/ui';
 import { backendEnabled } from '../lib/auth';
+import { REGIONS } from '../lib/geo';
 
-import { CHART_SERIES } from '../lib/brand';
+import { CHART_SERIES, REGION_COLOR } from '../lib/brand';
 
 const TYPE_COLORS = CHART_SERIES;
 
@@ -51,6 +52,14 @@ export default function Dashboard() {
   if (!data) return <Spinner />;
 
   const typeData = Object.entries(data.propertiesByType).map(([name, value]) => ({ name, value }));
+  const regionRows = [...REGIONS, 'Other']
+    .map((region) => ({
+      region,
+      count: data.propertiesByRegion[region] || 0,
+      sqft: data.sqftByRegion[region] || 0,
+    }))
+    .filter((r) => r.count > 0);
+  const maxRegionCount = Math.max(1, ...regionRows.map((r) => r.count));
   const rentByYear = data.criticalDates.slice(0, 6).map((d) => ({
     name: d.leaseName.split('—')[0].trim().slice(0, 14),
     days: Math.max(0, daysUntil(d.date)),
@@ -190,6 +199,44 @@ export default function Dashboard() {
               </span>
             ))}
           </div>
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card className="p-5">
+          <SectionTitle
+            action={
+              <Link to="/properties" className="text-sm font-medium text-blue-600 hover:underline">
+                View by region →
+              </Link>
+            }
+          >
+            Properties by Region
+          </SectionTitle>
+          {regionRows.length === 0 ? (
+            <p className="text-sm text-slate-500">No properties yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {regionRows.map((r) => (
+                <div key={r.region} className="flex items-center gap-3">
+                  <div className="w-32 shrink-0 text-sm text-slate-600">{r.region}</div>
+                  <div className="flex-1">
+                    <div
+                      className="h-5 rounded"
+                      style={{
+                        width: `${Math.max(4, (r.count / maxRegionCount) * 100)}%`,
+                        background: REGION_COLOR[r.region] || '#75787B',
+                      }}
+                    />
+                  </div>
+                  <div className="w-40 shrink-0 text-right text-sm tabular-nums text-slate-700">
+                    <span className="font-semibold">{num(r.count)}</span>
+                    <span className="text-slate-400"> · {num(r.sqft)} sf</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
 

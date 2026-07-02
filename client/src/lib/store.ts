@@ -1,5 +1,6 @@
 import type { Property, Lease, Transaction, DashboardData } from './types';
 import { SEED_PROPERTIES, SEED_LEASES, SEED_TRANSACTIONS } from './seed';
+import { regionForCountry } from './geo';
 
 // Browser-only persistence layer. Replaces the REST backend with localStorage so
 // the app can be served as a static site (GitHub Pages) or opened as a single file.
@@ -177,7 +178,14 @@ export function dashboardFrom(
     .reduce((s, t) => s + (t.estimated_value || 0) * ((t.probability || 0) / 100), 0);
 
   const byType: Record<string, number> = {};
-  for (const p of properties) byType[p.property_type] = (byType[p.property_type] || 0) + 1;
+  const byRegion: Record<string, number> = {};
+  const sqftByRegion: Record<string, number> = {};
+  for (const p of properties) {
+    byType[p.property_type] = (byType[p.property_type] || 0) + 1;
+    const region = regionForCountry(p.country);
+    byRegion[region] = (byRegion[region] || 0) + 1;
+    sqftByRegion[region] = (sqftByRegion[region] || 0) + (p.rentable_sqft || 0);
+  }
 
   return {
     counts: {
@@ -192,6 +200,8 @@ export function dashboardFrom(
     weightedPipeline: pipelineValue,
     criticalDates,
     propertiesByType: byType,
+    propertiesByRegion: byRegion,
+    sqftByRegion,
   };
 }
 

@@ -22,6 +22,7 @@ import {
 } from '../lib/reports';
 import { Button, Card, Select, SectionTitle, Spinner, StatCard } from '../components/ui';
 import { Monogram } from '../components/Logo';
+import { regionForCountry, REGIONS } from '../lib/geo';
 
 type ReportKey =
   | 'summary'
@@ -58,6 +59,7 @@ export default function Reports() {
   // Interactive filters — narrow the dataset that feeds every report/chart.
   const [fType, setFType] = useState('All');
   const [fOwnership, setFOwnership] = useState('All');
+  const [fRegion, setFRegion] = useState('All');
   const [fState, setFState] = useState('All');
   const [fStatus, setFStatus] = useState('All');
 
@@ -74,10 +76,15 @@ export default function Reports() {
     Array.from(new Set(vals.filter((v): v is string => !!v))).sort();
   const typeOptions = useMemo(() => distinct(properties.map((p) => p.property_type)), [properties]);
   const ownershipOptions = useMemo(() => distinct(properties.map((p) => p.ownership)), [properties]);
+  const regionOptions = useMemo(() => {
+    const present = new Set(properties.map((p) => regionForCountry(p.country)));
+    return [...REGIONS, 'Other'].filter((r) => present.has(r));
+  }, [properties]);
   const stateOptions = useMemo(() => distinct(properties.map((p) => p.state)), [properties]);
   const statusOptions = useMemo(() => distinct(leases.map((l) => l.status)), [leases]);
 
-  const propFilterActive = fType !== 'All' || fOwnership !== 'All' || fState !== 'All';
+  const propFilterActive =
+    fType !== 'All' || fOwnership !== 'All' || fRegion !== 'All' || fState !== 'All';
   const filtersActive = propFilterActive || fStatus !== 'All';
 
   const filteredProperties = useMemo(
@@ -86,9 +93,10 @@ export default function Reports() {
         (p) =>
           (fType === 'All' || p.property_type === fType) &&
           (fOwnership === 'All' || p.ownership === fOwnership) &&
+          (fRegion === 'All' || regionForCountry(p.country) === fRegion) &&
           (fState === 'All' || p.state === fState),
       ),
-    [properties, fType, fOwnership, fState],
+    [properties, fType, fOwnership, fRegion, fState],
   );
   const filteredLeases = useMemo(() => {
     const ids = new Set(filteredProperties.map((p) => p.id));
@@ -109,6 +117,7 @@ export default function Reports() {
   function resetFilters() {
     setFType('All');
     setFOwnership('All');
+    setFRegion('All');
     setFState('All');
     setFStatus('All');
   }
@@ -215,6 +224,7 @@ export default function Reports() {
         <div className="flex flex-wrap items-end gap-3">
           <FilterSelect label="Property Type" value={fType} onChange={setFType} options={typeOptions} />
           <FilterSelect label="Ownership" value={fOwnership} onChange={setFOwnership} options={ownershipOptions} />
+          <FilterSelect label="Region" value={fRegion} onChange={setFRegion} options={regionOptions} />
           <FilterSelect label="State" value={fState} onChange={setFState} options={stateOptions} />
           <FilterSelect label="Lease Status" value={fStatus} onChange={setFStatus} options={statusOptions} />
           {filtersActive && (
@@ -233,7 +243,8 @@ export default function Reports() {
       {/* Filters line on paper, when any filter is active */}
       {filtersActive && (
         <div className="mb-3 hidden text-xs text-slate-500 print:block">
-          Filters — Type: {fType} · Ownership: {fOwnership} · State: {fState} · Lease Status: {fStatus}
+          Filters — Type: {fType} · Ownership: {fOwnership} · Region: {fRegion} · State: {fState} ·
+          Lease Status: {fStatus}
         </div>
       )}
 
@@ -482,6 +493,23 @@ function SummaryReport({
     byState[m].rent += l.status === 'Active' ? l.base_rent_annual || 0 : 0;
   }
 
+  // By region: property count + SF from properties, active rent from their leases.
+  const byRegion: Record<string, { count: number; sqft: number; rent: number }> = {};
+  const bump = (region: string) =>
+    (byRegion[region] = byRegion[region] || { count: 0, sqft: 0, rent: 0 });
+  for (const p of properties) {
+    const r = bump(regionForCountry(p.country));
+    r.count += 1;
+    r.sqft += p.rentable_sqft || 0;
+  }
+  for (const l of leases) {
+    const region = regionForCountry(propById.get(l.property_id)?.country);
+    bump(region).rent += l.status === 'Active' ? l.base_rent_annual || 0 : 0;
+  }
+  const regionRows = [...REGIONS, 'Other']
+    .filter((r) => byRegion[r])
+    .map((r) => ({ region: r, ...byRegion[r] }));
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
@@ -498,6 +526,18 @@ function SummaryReport({
           <tbody>
             {Object.entries(byType).map(([t, v]) => (
               <tr key={t} className="border-b border-slate-100"><Td>{t}</Td><Td right>{num(v.count)}</Td><Td right>{num(v.sqft)}</Td></tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+
+      <Card className="p-5">
+        <SectionTitle>By Region</SectionTitle>
+        <table className="w-full text-sm">
+          <thead><tr className="border-b border-slate-200"><Th>Region</Th><Th right>Properties</Th><Th right>Rentable SF</Th><Th right>Active Rent/yr</Th></tr></thead>
+          <tbody>
+            {regionRows.map((r) => (
+              <tr key={r.region} className="border-b border-slate-100"><Td>{r.region}</Td><Td right>{num(r.count)}</Td><Td right>{num(r.sqft)}</Td><Td right>{usd(r.rent)}</Td></tr>
             ))}
           </tbody>
         </table>

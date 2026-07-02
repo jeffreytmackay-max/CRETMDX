@@ -26,6 +26,18 @@ export const PROPERTY_TYPE_COLOR: Record<string, string> = {
   Aviation: BRAND.coral,
 };
 
+// Categorical palette for the six portfolio regions (+ Other) — map markers,
+// legend, and region charts.
+export const REGION_COLOR: Record<string, string> = {
+  'North America': BRAND.crimson,
+  'South America': BRAND.coral,
+  Europe: BRAND.info,
+  'Middle East': BRAND.peach,
+  Africa: BRAND.success,
+  'Asia/Pacific': BRAND.rose,
+  Other: BRAND.gray500,
+};
+
 // Ordered series palette for charts.
 export const CHART_SERIES = [
   BRAND.crimson,
