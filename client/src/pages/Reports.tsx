@@ -12,7 +12,6 @@ import { api } from '../lib/api';
 import type { Property, Lease, Transaction } from '../lib/types';
 import { usd, usdCompact, num, fmtDate, monthsUntil } from '../lib/format';
 import {
-  rentRoll,
   expirationSchedule,
   expirationByRegion,
   futureObligations,
@@ -21,8 +20,13 @@ import {
   toCsv,
   downloadCsv,
 } from '../lib/reports';
-import { Button, Card, Select, SectionTitle, Spinner, StatCard } from '../components/ui';
+import { Button, Card, Input, Select, SectionTitle, Spinner, StatCard } from '../components/ui';
 import { Monogram } from '../components/Logo';
+import ColumnPicker from '../components/ColumnPicker';
+import { useColumns, type ColumnDef } from '../lib/columns';
+import { propertyColumns, customColumns } from '../lib/tableColumns';
+import { getFieldDefs } from '../lib/fields';
+import type { FieldDef } from '../lib/types';
 import { regionForCountry, REGIONS } from '../lib/geo';
 
 type ReportKey =
@@ -61,8 +65,20 @@ export default function Reports() {
   const [fType, setFType] = useState('All');
   const [fOwnership, setFOwnership] = useState('All');
   const [fRegion, setFRegion] = useState('All');
+  const [fCountry, setFCountry] = useState('All');
   const [fState, setFState] = useState('All');
   const [fStatus, setFStatus] = useState('All');
+  const [fBuildingType, setFBuildingType] = useState('All');
+  const [fLeaseType, setFLeaseType] = useState('All');
+  const [search, setSearch] = useState('');
+
+  // Custom-field definitions, so report columns can surface user-defined fields.
+  const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
+  const [leaseDefs, setLeaseDefs] = useState<FieldDef[]>([]);
+  useEffect(() => {
+    getFieldDefs('property').then(setPropDefs);
+    getFieldDefs('lease').then(setLeaseDefs);
+  }, []);
 
   useEffect(() => {
     Promise.all([api.properties(), api.leases(), api.transactions()]).then(([p, l, t]) => {
@@ -81,12 +97,21 @@ export default function Reports() {
     const present = new Set(properties.map((p) => regionForCountry(p.country)));
     return [...REGIONS, 'Other'].filter((r) => present.has(r));
   }, [properties]);
+  const countryOptions = useMemo(() => distinct(properties.map((p) => p.country)), [properties]);
   const stateOptions = useMemo(() => distinct(properties.map((p) => p.state)), [properties]);
   const statusOptions = useMemo(() => distinct(leases.map((l) => l.status)), [leases]);
+  const buildingTypeOptions = useMemo(() => distinct(leases.map((l) => l.building_type)), [leases]);
+  const leaseTypeOptions = useMemo(() => distinct(leases.map((l) => l.lease_type)), [leases]);
 
   const propFilterActive =
-    fType !== 'All' || fOwnership !== 'All' || fRegion !== 'All' || fState !== 'All';
-  const filtersActive = propFilterActive || fStatus !== 'All';
+    fType !== 'All' ||
+    fOwnership !== 'All' ||
+    fRegion !== 'All' ||
+    fCountry !== 'All' ||
+    fState !== 'All';
+  const leaseFilterActive =
+    fStatus !== 'All' || fBuildingType !== 'All' || fLeaseType !== 'All' || search.trim() !== '';
+  const filtersActive = propFilterActive || leaseFilterActive;
 
   const filteredProperties = useMemo(
     () =>
@@ -95,20 +120,32 @@ export default function Reports() {
           (fType === 'All' || p.property_type === fType) &&
           (fOwnership === 'All' || p.ownership === fOwnership) &&
           (fRegion === 'All' || regionForCountry(p.country) === fRegion) &&
+          (fCountry === 'All' || p.country === fCountry) &&
           (fState === 'All' || p.state === fState),
       ),
-    [properties, fType, fOwnership, fRegion, fState],
+    [properties, fType, fOwnership, fRegion, fCountry, fState],
   );
   const filteredLeases = useMemo(() => {
     const ids = new Set(filteredProperties.map((p) => p.id));
+    const propName = new Map(properties.map((p) => [p.id, p.name]));
+    const q = search.trim().toLowerCase();
     return leases.filter((l) => {
       if (fStatus !== 'All' && l.status !== fStatus) return false;
+      if (fBuildingType !== 'All' && l.building_type !== fBuildingType) return false;
+      if (fLeaseType !== 'All' && l.lease_type !== fLeaseType) return false;
+      if (q) {
+        const hay = [l.lease_name, l.counterparty, l.property_id != null ? propName.get(l.property_id) : '']
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       // With no property-level filter, include every lease (even unassigned);
       // with a filter active, keep only leases on matching properties.
       if (!propFilterActive) return true;
       return l.property_id != null && ids.has(l.property_id);
     });
-  }, [leases, filteredProperties, fStatus, propFilterActive]);
+  }, [leases, properties, filteredProperties, fStatus, fBuildingType, fLeaseType, search, propFilterActive]);
   const filteredTransactions = useMemo(() => {
     if (!propFilterActive) return transactions;
     const ids = new Set(filteredProperties.map((p) => p.id));
@@ -119,13 +156,16 @@ export default function Reports() {
     setFType('All');
     setFOwnership('All');
     setFRegion('All');
+    setFCountry('All');
     setFState('All');
     setFStatus('All');
+    setFBuildingType('All');
+    setFLeaseType('All');
+    setSearch('');
   }
 
   const data = useMemo(
     () => ({
-      roll: rentRoll(filteredProperties, filteredLeases),
       exp: expirationSchedule(filteredLeases),
       expRegion: expirationByRegion(filteredProperties, filteredLeases),
       obl: futureObligations(filteredLeases, 10),
@@ -135,13 +175,103 @@ export default function Reports() {
     [filteredProperties, filteredLeases, filteredTransactions],
   );
 
+  // ---- Dynamic Rent Roll columns (lease fields + cross-tab Property fields + custom) ----
+  const propsById = useMemo(() => new Map(properties.map((p) => [p.id, p])), [properties]);
+  const rollLeases = useMemo(
+    () =>
+      [...filteredLeases].sort((a, b) =>
+        (a.expiration_date || '').localeCompare(b.expiration_date || ''),
+      ),
+    [filteredLeases],
+  );
+
+  const rollColumns = useMemo<ColumnDef<Lease>[]>(() => {
+    const rentPsf = (l: Lease) => (l.rentable_sqft ? (l.base_rent_annual || 0) / l.rentable_sqft : 0);
+    const native: ColumnDef<Lease>[] = [
+      {
+        key: 'lease',
+        label: 'Lease',
+        group: 'This tab',
+        render: (l) => (
+          <>
+            <span className="font-medium text-slate-800">{l.lease_name}</span>
+            {l.counterparty && <div className="text-xs text-slate-400">{l.counterparty}</div>}
+          </>
+        ),
+        text: (l) => l.lease_name,
+      },
+    ];
+    const propCols = propertyColumns<Lease>((l) => propsById.get(l.property_id), undefined, propDefs);
+    const pByKey = new Map(propCols.map((c) => [c.key, c]));
+    const propName = { ...pByKey.get('From Property:name')!, defaultVisible: true };
+    const propState = { ...pByKey.get('From Property:state')!, defaultVisible: true };
+    const otherProp = propCols.filter(
+      (c) => c.key !== 'From Property:name' && c.key !== 'From Property:state',
+    );
+
+    const metrics: ColumnDef<Lease>[] = [
+      {
+        key: 'sf',
+        label: 'SF',
+        group: 'This tab',
+        align: 'right',
+        render: (l) => <span className="tabular-nums">{num(l.rentable_sqft || 0)}</span>,
+        text: (l) => l.rentable_sqft || 0,
+        sum: (l) => l.rentable_sqft || 0,
+        fmtSum: (n) => num(n),
+      },
+      {
+        key: 'base_rent',
+        label: 'Base Rent/yr',
+        group: 'This tab',
+        align: 'right',
+        render: (l) => <span className="tabular-nums">{usd(l.base_rent_annual || 0)}</span>,
+        text: (l) => Math.round(l.base_rent_annual || 0),
+        sum: (l) => l.base_rent_annual || 0,
+        fmtSum: (n) => usd(n),
+      },
+      {
+        key: 'rent_psf',
+        label: 'Rent/SF',
+        group: 'This tab',
+        align: 'right',
+        render: (l) => <span className="tabular-nums">{usd(rentPsf(l), 2)}</span>,
+        text: (l) => rentPsf(l).toFixed(2),
+      },
+      { key: 'expiration', label: 'Expiration', group: 'This tab', render: (l) => fmtDate(l.expiration_date), text: (l) => l.expiration_date || '' },
+      { key: 'status', label: 'Status', group: 'This tab', render: (l) => l.status, text: (l) => l.status },
+      // Available but hidden by default:
+      { key: 'opex_psf', label: 'OpEx/SF', group: 'This tab', align: 'right', defaultVisible: false, render: (l) => usd(l.opex_psf || 0, 2), text: (l) => (l.opex_psf || 0).toFixed(2) },
+      { key: 'commencement', label: 'Commencement', group: 'This tab', defaultVisible: false, render: (l) => fmtDate(l.commencement_date), text: (l) => l.commencement_date || '' },
+      { key: 'lease_type', label: 'Lease Type', group: 'This tab', defaultVisible: false, render: (l) => `${l.role} · ${l.lease_type}`, text: (l) => `${l.role} · ${l.lease_type}` },
+      { key: 'building_type', label: 'Building Type', group: 'This tab', defaultVisible: false, render: (l) => l.building_type || '—', text: (l) => l.building_type || '' },
+      { key: 'escalation', label: 'Escalation %', group: 'This tab', align: 'right', defaultVisible: false, render: (l) => (l.escalation_pct ? `${l.escalation_pct}%` : '—'), text: (l) => l.escalation_pct || 0 },
+    ];
+    return [
+      ...native,
+      propName,
+      propState,
+      ...metrics,
+      ...otherProp,
+      ...customColumns<Lease>(leaseDefs, 'Custom fields', (l) => l.custom),
+    ];
+  }, [propsById, propDefs, leaseDefs]);
+
+  const { keys: rollKeys, setKeys: setRollKeys, reset: resetRollCols, columns: rollCols } = useColumns(
+    'report-rentroll',
+    rollColumns,
+  );
+
   function exportCsv() {
     if (report === 'rentroll') {
       downloadCsv(
         'rent-roll.csv',
         toCsv(
-          ['Region', 'Lease', 'Property', 'State', 'Type', 'Rentable SF', 'Base Rent/yr', 'Rent/SF', 'OpEx/SF', 'Commencement', 'Expiration', 'Status'],
-          data.roll.map((r) => [r.region, r.lease, r.property, r.state, r.type, r.sqft, Math.round(r.baseRentAnnual), r.rentPsf.toFixed(2), r.opexPsf.toFixed(2), r.commencement, r.expiration, r.status]),
+          ['Region', ...rollCols.map((c) => c.label)],
+          rollLeases.map((l) => [
+            regionForCountry(propsById.get(l.property_id)?.country),
+            ...rollCols.map((c) => (c.text ? c.text(l) : '')),
+          ]),
         ),
       );
     } else if (report === 'expirations') {
@@ -232,8 +362,22 @@ export default function Reports() {
           <FilterSelect label="Property Type" value={fType} onChange={setFType} options={typeOptions} />
           <FilterSelect label="Ownership" value={fOwnership} onChange={setFOwnership} options={ownershipOptions} />
           <FilterSelect label="Region" value={fRegion} onChange={setFRegion} options={regionOptions} />
+          <FilterSelect label="Country" value={fCountry} onChange={setFCountry} options={countryOptions} />
           <FilterSelect label="State" value={fState} onChange={setFState} options={stateOptions} />
           <FilterSelect label="Lease Status" value={fStatus} onChange={setFStatus} options={statusOptions} />
+          <FilterSelect label="Building Type" value={fBuildingType} onChange={setFBuildingType} options={buildingTypeOptions} />
+          <FilterSelect label="Lease Type" value={fLeaseType} onChange={setFLeaseType} options={leaseTypeOptions} />
+          <div>
+            <div className="mb-1 text-xs font-medium text-slate-500">Search</div>
+            <div className="w-44">
+              <Input
+                type="search"
+                placeholder="Lease, tenant, property…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
           {filtersActive && (
             <Button variant="ghost" onClick={resetFilters}>
               Reset filters
@@ -250,8 +394,10 @@ export default function Reports() {
       {/* Filters line on paper, when any filter is active */}
       {filtersActive && (
         <div className="mb-3 hidden text-xs text-slate-500 print:block">
-          Filters — Type: {fType} · Ownership: {fOwnership} · Region: {fRegion} · State: {fState} ·
-          Lease Status: {fStatus}
+          Filters — Type: {fType} · Ownership: {fOwnership} · Region: {fRegion} · Country: {fCountry}{' '}
+          · State: {fState} · Lease Status: {fStatus} · Building Type: {fBuildingType} · Lease Type:{' '}
+          {fLeaseType}
+          {search.trim() && ` · Search: "${search.trim()}"`}
         </div>
       )}
 
@@ -275,7 +421,19 @@ export default function Reports() {
       {report === 'summary' && (
         <SummaryReport properties={filteredProperties} leases={filteredLeases} data={data} />
       )}
-      {report === 'rentroll' && <RentRollReport rows={data.roll} />}
+      {report === 'rentroll' && (
+        <>
+          <div className="no-print mb-3 flex justify-end">
+            <ColumnPicker
+              all={rollColumns}
+              visible={rollKeys}
+              onChange={setRollKeys}
+              onReset={resetRollCols}
+            />
+          </div>
+          <RentRollReport leases={rollLeases} columns={rollCols} propsById={propsById} />
+        </>
+      )}
       {report === 'expirations' && (
         <ExpirationsReport rows={data.exp} groups={data.expRegion} />
       )}
@@ -468,7 +626,6 @@ function Td({ children, right, bold }: { children: React.ReactNode; right?: bool
 }
 
 interface ReportData {
-  roll: ReturnType<typeof rentRoll>;
   exp: ReturnType<typeof expirationSchedule>;
   obl: ReturnType<typeof futureObligations>;
   crit: ReturnType<typeof criticalDates>;
@@ -582,52 +739,74 @@ function SummaryReport({
   );
 }
 
-function RentRollReport({ rows }: { rows: ReturnType<typeof rentRoll> }) {
-  const totalSqft = rows.reduce((s, r) => s + r.sqft, 0);
-  const totalRent = rows.reduce((s, r) => s + r.baseRentAnnual, 0);
-
-  // Group rows by region, in region order (rows keep their expiration sort).
-  const byRegion = new Map<string, typeof rows>();
-  for (const r of rows) {
-    if (!byRegion.has(r.region)) byRegion.set(r.region, []);
-    byRegion.get(r.region)!.push(r);
+function RentRollReport({
+  leases,
+  columns,
+  propsById,
+}: {
+  leases: Lease[];
+  columns: ColumnDef<Lease>[];
+  propsById: Map<number, Property>;
+}) {
+  // Group leases by region (in region order), preserving the incoming sort.
+  const byRegion = new Map<string, Lease[]>();
+  for (const l of leases) {
+    const r = regionForCountry(propsById.get(l.property_id)?.country);
+    if (!byRegion.has(r)) byRegion.set(r, []);
+    byRegion.get(r)!.push(l);
   }
   const groups = [...REGIONS, 'Other']
     .filter((r) => byRegion.has(r))
     .map((region) => ({ region, rows: byRegion.get(region)! }));
 
+  const nCols = columns.length;
+  const sumCell = (c: ColumnDef<Lease>, rows: Lease[]): React.ReactNode =>
+    c.sum ? (c.fmtSum ?? num)(rows.reduce((s, l) => s + c.sum!(l), 0)) : '';
+
   return (
     <Card className="overflow-x-auto scroll-touch p-0">
       <table className="w-full min-w-[820px] text-sm">
-        <thead><tr className="border-b border-slate-200"><Th>Lease</Th><Th>State</Th><Th right>SF</Th><Th right>Base Rent/yr</Th><Th right>Rent/SF</Th><Th>Expiration</Th><Th>Status</Th></tr></thead>
+        <thead>
+          <tr className="border-b border-slate-200">
+            {columns.map((c) => (
+              <Th key={c.key} right={c.align === 'right'}>
+                {c.label}
+              </Th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
-          {groups.map((g) => {
-            const gSqft = g.rows.reduce((s, r) => s + r.sqft, 0);
-            const gRent = g.rows.reduce((s, r) => s + r.baseRentAnnual, 0);
-            return (
-              <Fragment key={g.region}>
-                <tr className="bg-slate-50/70">
-                  <td colSpan={7} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {g.region} <span className="text-slate-400">· {g.rows.length} leases</span>
-                  </td>
+          {groups.map((g) => (
+            <Fragment key={g.region}>
+              <tr className="bg-slate-50/70">
+                <td colSpan={nCols} className="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {g.region} <span className="text-slate-400">· {g.rows.length} leases</span>
+                </td>
+              </tr>
+              {g.rows.map((l) => (
+                <tr key={l.id} className="border-b border-slate-100">
+                  {columns.map((c) => (
+                    <Td key={c.key} right={c.align === 'right'}>
+                      {c.render(l)}
+                    </Td>
+                  ))}
                 </tr>
-                {g.rows.map((r, i) => (
-                  <tr key={i} className="border-b border-slate-100">
-                    <Td><span className="font-medium text-slate-800">{r.lease}</span><div className="text-xs text-slate-400">{r.property}</div></Td>
-                    <Td>{r.state}</Td><Td right>{num(r.sqft)}</Td><Td right>{usd(r.baseRentAnnual)}</Td>
-                    <Td right>{usd(r.rentPsf, 2)}</Td><Td>{fmtDate(r.expiration)}</Td><Td>{r.status}</Td>
-                  </tr>
+              ))}
+              <tr className="border-b border-slate-200 bg-slate-50/40 text-slate-600">
+                {columns.map((c, i) => (
+                  <Td key={c.key} right={c.align === 'right'}>
+                    {i === 0 ? `${g.region} subtotal` : sumCell(c, g.rows)}
+                  </Td>
                 ))}
-                <tr className="border-b border-slate-200 bg-slate-50/40 text-slate-600">
-                  <Td>{g.region} subtotal</Td><Td>—</Td><Td right>{num(gSqft)}</Td><Td right>{usd(gRent)}</Td>
-                  <Td right>{usd(gSqft ? gRent / gSqft : 0, 2)}</Td><Td>—</Td><Td>—</Td>
-                </tr>
-              </Fragment>
-            );
-          })}
+              </tr>
+            </Fragment>
+          ))}
           <tr className="border-t-2 border-slate-300 bg-slate-50">
-            <Td bold>Total · {rows.length} leases</Td><Td>—</Td><Td right bold>{num(totalSqft)}</Td><Td right bold>{usd(totalRent)}</Td>
-            <Td right bold>{usd(totalSqft ? totalRent / totalSqft : 0, 2)}</Td><Td>—</Td><Td>—</Td>
+            {columns.map((c, i) => (
+              <Td key={c.key} right={c.align === 'right'} bold>
+                {i === 0 ? `Total · ${leases.length} leases` : sumCell(c, leases)}
+              </Td>
+            ))}
           </tr>
         </tbody>
       </table>

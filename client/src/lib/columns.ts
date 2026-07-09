@@ -15,6 +15,9 @@ export interface ColumnDef<Row> {
   align?: 'left' | 'right';
   defaultVisible?: boolean; // false = available but hidden until added
   render: (row: Row) => ReactNode;
+  // Plain-text value for CSV export / printing. Falls back to nothing when a
+  // column renders rich content that can't be flattened.
+  text?: (row: Row) => string | number;
   // Numeric total for the Properties subtotal/footer rows. Columns without a
   // sum simply render blank in those rows.
   sum?: (row: Row) => number;
