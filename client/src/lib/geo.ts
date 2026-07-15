@@ -45,11 +45,20 @@ const NL_PROVINCES: string[] = [
   'Zuid-Holland',
 ];
 
+// The 16 German federal states (Bundesländer).
+const DE_STATES: string[] = [
+  'Baden-Württemberg', 'Bayern', 'Berlin', 'Brandenburg', 'Bremen', 'Hamburg',
+  'Hessen', 'Mecklenburg-Vorpommern', 'Niedersachsen', 'Nordrhein-Westfalen',
+  'Rheinland-Pfalz', 'Saarland', 'Sachsen', 'Sachsen-Anhalt', 'Schleswig-Holstein',
+  'Thüringen',
+];
+
 const STATES_BY_COUNTRY: Record<string, string[]> = {
   USA: US_STATES,
   Canada: CA_PROVINCES,
   Italy: IT_REGIONS,
   Netherlands: NL_PROVINCES,
+  Germany: DE_STATES,
 };
 
 // Returns the list of states/regions for a country, or null when we don't have a
