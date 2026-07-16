@@ -53,12 +53,53 @@ const DE_STATES: string[] = [
   'Thüringen',
 ];
 
+// UK constituent countries (the practical top-level region).
+const UK_NATIONS: string[] = ['England', 'Scotland', 'Wales', 'Northern Ireland'];
+
+// France — 13 metropolitan regions + 5 overseas regions.
+const FR_REGIONS: string[] = [
+  'Auvergne-Rhône-Alpes', 'Bourgogne-Franche-Comté', 'Bretagne', 'Centre-Val de Loire',
+  'Corse', 'Grand Est', 'Hauts-de-France', 'Île-de-France', 'Normandie',
+  'Nouvelle-Aquitaine', 'Occitanie', 'Pays de la Loire', "Provence-Alpes-Côte d'Azur",
+  'Guadeloupe', 'Martinique', 'Guyane', 'La Réunion', 'Mayotte',
+];
+
+// Spain — 17 autonomous communities + 2 autonomous cities.
+const ES_REGIONS: string[] = [
+  'Andalucía', 'Aragón', 'Asturias', 'Islas Baleares', 'Canarias', 'Cantabria',
+  'Castilla-La Mancha', 'Castilla y León', 'Cataluña', 'Comunidad Valenciana',
+  'Extremadura', 'Galicia', 'La Rioja', 'Madrid', 'Murcia', 'Navarra', 'País Vasco',
+  'Ceuta', 'Melilla',
+];
+
+// Australia — 6 states + 2 territories.
+const AU_STATES: string[] = [
+  'Australian Capital Territory', 'New South Wales', 'Northern Territory',
+  'Queensland', 'South Australia', 'Tasmania', 'Victoria', 'Western Australia',
+];
+
+// Japan — 47 prefectures (romanized), north to south.
+const JP_PREFECTURES: string[] = [
+  'Hokkaido', 'Aomori', 'Iwate', 'Miyagi', 'Akita', 'Yamagata', 'Fukushima',
+  'Ibaraki', 'Tochigi', 'Gunma', 'Saitama', 'Chiba', 'Tokyo', 'Kanagawa',
+  'Niigata', 'Toyama', 'Ishikawa', 'Fukui', 'Yamanashi', 'Nagano', 'Gifu',
+  'Shizuoka', 'Aichi', 'Mie', 'Shiga', 'Kyoto', 'Osaka', 'Hyogo', 'Nara',
+  'Wakayama', 'Tottori', 'Shimane', 'Okayama', 'Hiroshima', 'Yamaguchi',
+  'Tokushima', 'Kagawa', 'Ehime', 'Kochi', 'Fukuoka', 'Saga', 'Nagasaki',
+  'Kumamoto', 'Oita', 'Miyazaki', 'Kagoshima', 'Okinawa',
+];
+
 const STATES_BY_COUNTRY: Record<string, string[]> = {
   USA: US_STATES,
   Canada: CA_PROVINCES,
   Italy: IT_REGIONS,
   Netherlands: NL_PROVINCES,
   Germany: DE_STATES,
+  'United Kingdom': UK_NATIONS,
+  France: FR_REGIONS,
+  Spain: ES_REGIONS,
+  Australia: AU_STATES,
+  Japan: JP_PREFECTURES,
 };
 
 // Returns the list of states/regions for a country, or null when we don't have a
