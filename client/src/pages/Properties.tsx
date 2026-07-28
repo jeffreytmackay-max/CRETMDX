@@ -16,6 +16,8 @@ import {
 import { SortGroupBar } from '../components/SortGroupBar';
 import CustomFields, { CustomFieldsView } from '../components/CustomFields';
 import ColumnPicker from '../components/ColumnPicker';
+import AddressAutocomplete from '../components/AddressAutocomplete';
+import { hasMapsKey, staticMapUrl } from '../lib/maps';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 import { useColumns, type ColumnDef } from '../lib/columns';
 import { customColumns } from '../lib/tableColumns';
@@ -410,6 +412,7 @@ export default function Properties() {
                               onOpenTxn={(id) => navigate(`/transactions?open=${id}`)}
                             />
                             <PropertyCustomView property={p} />
+                            <PropertyStaticMap property={p} />
                           </td>
                         </tr>
                       )}
@@ -548,6 +551,31 @@ function PropertyLeases({
   );
 }
 
+function PropertyStaticMap({ property }: { property: Property }) {
+  const lat = Number(property.lat);
+  const lng = Number(property.lng);
+  const ok =
+    hasMapsKey() && Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+  if (!ok) return null;
+  const url = staticMapUrl(lat, lng, { w: 440, h: 200 });
+  if (!url) return null;
+  return (
+    <div className="mt-3">
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        Location
+      </div>
+      <img
+        src={url}
+        alt={`Map of ${property.name}`}
+        width={440}
+        height={200}
+        loading="lazy"
+        className="max-w-full rounded-lg border border-slate-200"
+      />
+    </div>
+  );
+}
+
 function PropertyCustomView({ property }: { property: Property }) {
   return (
     <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
@@ -567,6 +595,15 @@ function PropertyForm({
 }) {
   const [form, setForm] = useState<Partial<Property>>(initial);
   const set = (k: keyof Property, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+  // Fill fields from a chosen Google Places address (skips empty values).
+  const applyPlace = (fields: Partial<Property>) =>
+    setForm((f) => {
+      const next = { ...f };
+      for (const [k, v] of Object.entries(fields)) {
+        if (v !== undefined && v !== '') (next as Record<string, unknown>)[k] = v;
+      }
+      return next;
+    });
 
   return (
     <Modal title={form.id ? 'Edit Property' : 'Add Property'} onClose={onClose}>
@@ -581,7 +618,17 @@ function PropertyForm({
           <Input value={form.name || ''} onChange={(e) => set('name', e.target.value)} required />
         </Field>
         <Field label="Address">
-          <Input value={form.address || ''} onChange={(e) => set('address', e.target.value)} />
+          <AddressAutocomplete
+            value={form.address || ''}
+            onChange={(v) => set('address', v)}
+            onPick={applyPlace}
+          />
+          {hasMapsKey() && (
+            <span className="mt-1 block text-xs text-slate-400">
+              Start typing and pick a suggestion to auto-fill city, state, zip, country &
+              coordinates.
+            </span>
+          )}
         </Field>
         <div className="grid grid-cols-3 gap-3">
           <Field label="City">

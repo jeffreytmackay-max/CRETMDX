@@ -42,6 +42,9 @@ jobs:
           # runs in local browser-only mode. The anon key is a public key.
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          # Optional: a referrer-restricted Google Maps key, baked in so every
+          # device has it. Leave unset to configure it per-browser in Settings.
+          VITE_GOOGLE_MAPS_KEY: ${{ vars.VITE_GOOGLE_MAPS_KEY }}
       - uses: actions/configure-pages@v5
         with:
           enablement: true

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Link } from 'react-router-dom';
@@ -7,6 +7,8 @@ import type { Property } from '../lib/types';
 import { num } from '../lib/format';
 import { Card, Spinner } from '../components/ui';
 import { VectorBasemap } from '../components/VectorBasemap';
+import GoogleMapView from '../components/GoogleMapView';
+import { hasMapsKey } from '../lib/maps';
 import { regionForCountry, REGIONS } from '../lib/geo';
 
 import { PROPERTY_TYPE_COLOR as TYPE_COLOR, REGION_COLOR } from '../lib/brand';
@@ -51,6 +53,8 @@ export default function MapView() {
   // track whether they actually loaded so we can flag it if they don't.
   const [showStreets, setShowStreets] = useState(false);
   const [tilesOk, setTilesOk] = useState(true);
+  // Prefer the Google basemap when a key is configured; otherwise the offline one.
+  const [basemap, setBasemap] = useState<'offline' | 'google'>(hasMapsKey() ? 'google' : 'offline');
 
   useEffect(() => {
     api.properties().then((p) => {
@@ -77,10 +81,13 @@ export default function MapView() {
   const mappable = filtered.filter(hasCoords);
   const missing = filtered.length - mappable.length;
 
-  const colorFor = (p: Property) =>
-    colorBy === 'region'
-      ? REGION_COLOR[regionForCountry(p.country)] || '#75787B'
-      : TYPE_COLOR[p.property_type] || '#75787B';
+  const colorFor = useCallback(
+    (p: Property) =>
+      colorBy === 'region'
+        ? REGION_COLOR[regionForCountry(p.country)] || '#75787B'
+        : TYPE_COLOR[p.property_type] || '#75787B',
+    [colorBy],
+  );
 
   // Legend entries for the active color mode (only regions that actually appear).
   const legend =
@@ -137,22 +144,43 @@ export default function MapView() {
               </button>
             ))}
           </div>
-          <button
-            onClick={() => {
-              setShowStreets((v) => !v);
-              setTilesOk(true);
-            }}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
-              showStreets ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-            title="Overlay detailed street map (requires internet; may be blocked on some networks)"
-          >
-            🛣 Street detail
-          </button>
+          {hasMapsKey() && (
+            <div className="flex items-center gap-1 rounded-full bg-slate-100 p-0.5">
+              <span className="pl-2 pr-1 text-xs text-slate-400">Map:</span>
+              {(['google', 'offline'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setBasemap(mode)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize transition ${
+                    basemap === mode ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          )}
+          {basemap === 'offline' && (
+            <button
+              onClick={() => {
+                setShowStreets((v) => !v);
+                setTilesOk(true);
+              }}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                showStreets ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+              title="Overlay detailed street map (requires internet; may be blocked on some networks)"
+            >
+              🛣 Street detail
+            </button>
+          )}
         </div>
       </div>
 
       <div className="relative flex-1" style={{ minHeight: '60vh' }}>
+        {basemap === 'google' && hasMapsKey() ? (
+          <GoogleMapView properties={mappable} colorFor={colorFor} />
+        ) : (
         <MapContainer center={[39.5, -96]} zoom={4} scrollWheelZoom style={{ height: '100%' }}>
           <ResizeHandler />
           {/* Always-available offline basemap (bundled country + state outlines). */}
@@ -205,6 +233,7 @@ export default function MapView() {
             </Marker>
           ))}
         </MapContainer>
+        )}
 
         <Card className="absolute bottom-6 left-6 z-[500] p-3">
           <div className="mb-1.5 text-xs font-semibold text-slate-700">

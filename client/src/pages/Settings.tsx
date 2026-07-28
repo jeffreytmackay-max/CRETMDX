@@ -5,6 +5,8 @@ import { clearAllPdfs, exportAllPdfs, importPdfs } from '../lib/pdfStore';
 import { Button, Card, Field, Input, Select, SectionTitle } from '../components/ui';
 import type { FieldDef, FieldEntity, FieldType } from '../lib/types';
 import { getFieldDefs, addFieldDef, removeFieldDef, slugify } from '../lib/fields';
+import { api } from '../lib/api';
+import { getMapsKey, setMapsKey, loadGoogleMaps } from '../lib/maps';
 import {
   getSupabaseConfig,
   setSupabaseConfig,
@@ -146,6 +148,10 @@ export default function Settings() {
           <CustomFieldsCard />
         </div>
 
+        <div className="lg:col-span-2">
+          <GoogleMapsCard />
+        </div>
+
         <Card className="p-5">
           <SectionTitle>Anthropic API Key</SectionTitle>
           <p className="mb-4 text-sm text-slate-600">
@@ -266,6 +272,131 @@ export default function Settings() {
         </Card>
       </div>
     </div>
+  );
+}
+
+// Google Maps: store the API key (browser-local) and bulk-geocode any properties
+// that are missing coordinates.
+function GoogleMapsCard() {
+  const [key, setKey] = useState(getMapsKey());
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [msg, setMsg] = useState('');
+
+  function save() {
+    setMapsKey(key);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  function geocodeOne(
+    geocoder: { geocode: (r: unknown, cb: (results: unknown, status: string) => void) => void },
+    address: string,
+  ): Promise<{ lat: number; lng: number } | null> {
+    return new Promise((resolve) => {
+      geocoder.geocode({ address }, (results: unknown, status: string) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const loc = (results as any)?.[0]?.geometry?.location;
+        if (status === 'OK' && loc) resolve({ lat: loc.lat(), lng: loc.lng() });
+        else resolve(null);
+      });
+    });
+  }
+
+  async function geocodeMissing() {
+    setBusy('Loading map service…');
+    setMsg('');
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const g = (await loadGoogleMaps('places')) as any;
+      const geocoder = new g.maps.Geocoder();
+      const props = await api.properties();
+      const targets = props.filter((p) => {
+        const lat = Number(p.lat);
+        const lng = Number(p.lng);
+        const bad = !Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0);
+        return bad && (p.address || p.city);
+      });
+      if (targets.length === 0) {
+        setMsg('Every property with an address already has coordinates.');
+        return;
+      }
+      let filled = 0;
+      let failed = 0;
+      for (let i = 0; i < targets.length; i++) {
+        setBusy(`Geocoding ${i + 1} of ${targets.length}…`);
+        const p = targets[i];
+        const q = [p.address, p.city, p.state, p.zip, p.country].filter(Boolean).join(', ');
+        const res = await geocodeOne(geocoder, q);
+        if (res) {
+          await api.updateProperty(p.id, { lat: res.lat, lng: res.lng });
+          filled++;
+        } else {
+          failed++;
+        }
+        await new Promise((r) => setTimeout(r, 120));
+      }
+      setMsg(
+        `Filled coordinates for ${filled} propert${filled === 1 ? 'y' : 'ies'}` +
+          (failed ? `, ${failed} could not be geocoded` : '') +
+          '. Reload to see them on the map.',
+      );
+    } catch (e) {
+      setMsg('Geocoding failed: ' + (e instanceof Error ? e.message : 'unknown error'));
+    } finally {
+      setBusy('');
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <SectionTitle>Google Maps</SectionTitle>
+      <p className="mb-4 text-sm text-slate-600">
+        Add a Google Maps API key to enable address autocomplete (auto-fills city/state/zip/country
+        and coordinates), the Google basemap with satellite &amp; Street View, and location
+        thumbnails. The key is stored <strong>only in this browser</strong>.
+      </p>
+      <Field label="Maps API key">
+        <Input
+          type="password"
+          placeholder="AIza…"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          autoComplete="off"
+        />
+      </Field>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Button onClick={save}>Save key</Button>
+        {getMapsKey() && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setKey('');
+              setMapsKey('');
+            }}
+          >
+            Remove
+          </Button>
+        )}
+        <Button variant="ghost" onClick={geocodeMissing} disabled={!!busy || key.trim().length < 10}>
+          📍 Fill missing coordinates
+        </Button>
+        {saved && <span className="text-sm font-medium text-emerald-600">Saved ✓</span>}
+        {busy && <span className="text-sm text-slate-500">{busy}</span>}
+      </div>
+      {msg && <p className="mt-3 text-sm font-medium text-slate-700">{msg}</p>}
+
+      <div className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="mb-1 font-medium">Important: restrict your key</div>
+        <p>
+          A browser key is visible in the app, so in Google Cloud Console lock it down: add an{' '}
+          <strong>HTTP referrer restriction</strong> for{' '}
+          <code>https://jeffreytmackay-max.github.io/*</code> (and <code>http://localhost/*</code>{' '}
+          for testing), and <strong>restrict it to these APIs</strong> — Maps JavaScript, Places,
+          Geocoding, and Maps Static. Billing is pay-as-you-go with a monthly free credit.
+        </p>
+      </div>
+    </Card>
   );
 }
 
