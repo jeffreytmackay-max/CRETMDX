@@ -36,6 +36,7 @@ type ReportKey =
   | 'gantt'
   | 'obligations'
   | 'critical'
+  | 'insurance'
   | 'pipeline';
 
 const REPORTS: { key: ReportKey; label: string }[] = [
@@ -45,6 +46,7 @@ const REPORTS: { key: ReportKey; label: string }[] = [
   { key: 'gantt', label: 'Lease Timeline' },
   { key: 'obligations', label: 'Rent Obligations' },
   { key: 'critical', label: 'Critical Dates' },
+  { key: 'insurance', label: 'Insurance (COI)' },
   { key: 'pipeline', label: 'Deal Pipeline' },
 ];
 
@@ -312,6 +314,24 @@ export default function Reports() {
         'critical-dates.csv',
         toCsv(['Lease', 'Property', 'Event', 'Date', 'Days Remaining', 'Rentable SF', 'Annual Rent'], data.crit.map((r) => [r.lease, r.property, r.event, r.date, r.daysRemaining, r.sqft, Math.round(r.annualRent)])),
       );
+    } else if (report === 'insurance') {
+      downloadCsv(
+        'insurance-coi.csv',
+        toCsv(
+          ['Lease', 'Landlord', 'Property', 'State', 'Carrier', 'Additional Insured', 'Certificate Holder', 'COI Status', 'Policy Effective', 'Policy Expiration', 'CGL Each Occurrence', 'CGL Aggregate', 'Auto Liability', 'Umbrella', "Employer's Liability", 'Workers Comp', 'Waiver of Subrogation', 'Primary & Non-Contributory', 'Broker', 'Broker Contact', 'Requirements', 'Notes'],
+          filteredLeases.map((l) => {
+            const i = l.insurance || {};
+            return [
+              l.lease_name, l.counterparty || '', l.property_name || '', l.property_state || '',
+              i.carrier || '', i.additional_insured || '', i.certificate_holder || '', i.coi_status || '',
+              i.effective_date || '', i.expiration_date || '', i.cgl_each_occurrence || 0, i.cgl_aggregate || 0,
+              i.auto_liability || 0, i.umbrella || 0, i.employers_liability || 0, i.workers_comp ? 'Yes' : 'No',
+              i.waiver_of_subrogation ? 'Yes' : 'No', i.primary_noncontributory ? 'Yes' : 'No',
+              i.broker_name || '', i.broker_contact || '', i.requirements || '', i.notes || '',
+            ];
+          }),
+        ),
+      );
     } else if (report === 'pipeline') {
       downloadCsv(
         'deal-pipeline.csv',
@@ -440,6 +460,7 @@ export default function Reports() {
       {report === 'gantt' && <LeaseGanttReport leases={filteredLeases} />}
       {report === 'obligations' && <ObligationsReport rows={data.obl} />}
       {report === 'critical' && <CriticalReport rows={data.crit} />}
+      {report === 'insurance' && <InsuranceReport leases={filteredLeases} />}
       {report === 'pipeline' && <PipelineReport rows={data.pipe} />}
 
       {/* Print footer (visible on paper) */}
@@ -918,6 +939,57 @@ function CriticalReport({ rows }: { rows: ReturnType<typeof criticalDates> }) {
             </tr>
           ))}
           {rows.length === 0 && <tr><Td>No critical dates in the next 24 months.</Td></tr>}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
+function InsuranceReport({ leases }: { leases: Lease[] }) {
+  const rows = [...leases].sort((a, b) =>
+    (a.insurance?.expiration_date || '').localeCompare(b.insurance?.expiration_date || ''),
+  );
+  return (
+    <Card className="overflow-x-auto p-0">
+      <table className="w-full min-w-[900px] text-sm">
+        <thead>
+          <tr className="border-b border-slate-200">
+            <Th>Lease / Landlord</Th>
+            <Th>Property</Th>
+            <Th>Carrier</Th>
+            <Th>Additional Insured</Th>
+            <Th>COI Status</Th>
+            <Th right>CGL / Occ.</Th>
+            <Th>Policy Exp.</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((l) => {
+            const i = l.insurance || {};
+            return (
+              <tr key={l.id} className="border-b border-slate-100">
+                <Td>
+                  <span className="font-medium text-slate-800">{l.lease_name}</span>
+                  <div className="text-xs text-slate-400">{l.counterparty || '—'}</div>
+                </Td>
+                <Td>{l.property_name || '—'}</Td>
+                <Td>{i.carrier || '—'}</Td>
+                <Td>
+                  <span className="inline-block max-w-[220px] align-top text-xs">
+                    {i.additional_insured || '—'}
+                  </span>
+                </Td>
+                <Td>{i.coi_status || '—'}</Td>
+                <Td right>{i.cgl_each_occurrence ? usdCompact(i.cgl_each_occurrence) : '—'}</Td>
+                <Td>{fmtDate(i.expiration_date)}</Td>
+              </tr>
+            );
+          })}
+          {rows.length === 0 && (
+            <tr>
+              <Td>No leases match the current filters.</Td>
+            </tr>
+          )}
         </tbody>
       </table>
     </Card>

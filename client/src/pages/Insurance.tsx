@@ -17,6 +17,28 @@ import {
 } from '../components/ui';
 import { SortGroupBar } from '../components/SortGroupBar';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
+import {
+  saveCoiPdf,
+  getCoiPdf,
+  deleteCoiPdf,
+  listCoiPdfIds,
+  openCoiPdf,
+  getPdf,
+} from '../lib/pdfStore';
+import { hasApiKey, extractInsuranceFromPdf } from '../lib/ai';
+
+// Fill only the insurance fields that are currently empty (never overwrite
+// values already entered), used when pulling from the lease PDF.
+function mergeInsurance(existing: LeaseInsurance, extracted: LeaseInsurance): LeaseInsurance {
+  const out: LeaseInsurance = { ...existing };
+  for (const [k, v] of Object.entries(extracted)) {
+    const cur = (out as Record<string, unknown>)[k];
+    const curEmpty = cur === undefined || cur === '' || cur === 0 || cur === false || cur === null;
+    const hasVal = v !== undefined && v !== '' && v !== 0 && v !== false && v !== null;
+    if (curEmpty && hasVal) (out as Record<string, unknown>)[k] = v;
+  }
+  return out;
+}
 
 const COI_STATUSES = ['Not Required', 'Requested', 'Pending', 'On File', 'Expired'];
 
@@ -57,11 +79,65 @@ export default function Insurance() {
   const [sortKey, setSortKey] = useState('expiration');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [groupKey, setGroupKey] = useState('none');
+  const [coiIds, setCoiIds] = useState<Set<number>>(new Set());
+  const [busy, setBusy] = useState('');
+  const [banner, setBanner] = useState('');
   const navigate = useNavigate();
 
+  // Read each lease's abstracted PDF with Claude and fill empty insurance fields.
+  async function pullFromPdfs() {
+    if (!hasApiKey()) {
+      setBanner('Add your Anthropic API key in Settings first (that key reads the lease PDFs).');
+      return;
+    }
+    setBanner('');
+    setBusy('Finding lease PDFs…');
+    const withPdf: { lease: Lease; blob: Blob }[] = [];
+    for (const l of leases) {
+      const rec = await getPdf(l.id);
+      if (rec) withPdf.push({ lease: l, blob: rec.blob });
+    }
+    if (withPdf.length === 0) {
+      setBusy('');
+      setBanner('No lease PDFs are attached on this device, so there is nothing to read.');
+      return;
+    }
+    if (
+      !confirm(
+        `Read ${withPdf.length} lease PDF(s) with Claude to pull insurance requirements? This uses ` +
+          'your Anthropic API key (a few cents each) and only fills fields that are currently empty.',
+      )
+    ) {
+      setBusy('');
+      return;
+    }
+    let filled = 0;
+    let failed = 0;
+    for (let i = 0; i < withPdf.length; i++) {
+      const { lease, blob } = withPdf[i];
+      setBusy(`Reading ${i + 1} of ${withPdf.length}: ${lease.lease_name}…`);
+      try {
+        const extracted = await extractInsuranceFromPdf(blob);
+        const merged = mergeInsurance(lease.insurance || {}, extracted);
+        await api.updateLease(lease.id, { insurance: merged });
+        filled++;
+      } catch {
+        failed++;
+      }
+    }
+    await load();
+    setBusy('');
+    setBanner(
+      `Pulled insurance from ${filled} lease PDF(s)` +
+        (failed ? `, ${failed} could not be read` : '') +
+        '. Review each in the editor and verify against the lease.',
+    );
+  }
+
   const load = () =>
-    api.leases().then((l) => {
+    Promise.all([api.leases(), listCoiPdfIds()]).then(([l, ids]) => {
       setLeases(l);
+      setCoiIds(new Set(ids));
       setLoading(false);
     });
   useEffect(() => {
@@ -147,12 +223,25 @@ export default function Insurance() {
 
   return (
     <div className="p-4 md:p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900">Certificates of Insurance</h1>
-        <p className="text-sm text-slate-500">
-          Insurance requirements and annual COI renewal tracking for every lease.
-        </p>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Certificates of Insurance</h1>
+          <p className="text-sm text-slate-500">
+            Insurance requirements and annual COI renewal tracking for every lease.
+          </p>
+        </div>
+        <div className="flex flex-shrink-0 items-center gap-3">
+          {busy && <span className="text-sm text-slate-500">{busy}</span>}
+          <Button variant="ghost" onClick={pullFromPdfs} disabled={!!busy}>
+            ✨ Pull insurance from lease PDFs
+          </Button>
+        </div>
       </div>
+      {banner && (
+        <div className="mb-4 rounded-lg border border-[#44546A]/20 bg-[#44546A]/5 p-3 text-sm text-slate-700">
+          {banner}
+        </div>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Leases" value={num(stats.total)} accent="blue" />
@@ -231,12 +320,23 @@ export default function Insurance() {
                   return (
                     <tr key={l.id} className="border-b border-slate-100 hover:bg-slate-50">
                       <td className="px-5 py-3">
-                        <button
-                          className="text-left font-medium text-slate-800 hover:text-blue-600 hover:underline"
-                          onClick={() => setEditing(l)}
-                        >
-                          {l.lease_name}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className="text-left font-medium text-slate-800 hover:text-blue-600 hover:underline"
+                            onClick={() => setEditing(l)}
+                          >
+                            {l.lease_name}
+                          </button>
+                          {coiIds.has(l.id) && (
+                            <button
+                              title="View certificate PDF"
+                              onClick={() => openCoiPdf(l.id)}
+                              className="text-xs text-rose-500 hover:text-rose-700"
+                            >
+                              📎
+                            </button>
+                          )}
+                        </div>
                         <div className="text-xs text-slate-400">{l.counterparty || '—'}</div>
                       </td>
                       <td className="px-5 py-3">
@@ -337,6 +437,42 @@ function CoiForm({
 }) {
   const [form, setForm] = useState<LeaseInsurance>(lease.insurance || {});
   const set = (k: keyof LeaseInsurance, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+  // Certificate PDF (device-local).
+  const [existing, setExisting] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [removeExisting, setRemoveExisting] = useState(false);
+  const [hasLeasePdf, setHasLeasePdf] = useState(false);
+  const [pulling, setPulling] = useState('');
+  useEffect(() => {
+    getCoiPdf(lease.id).then((r) => setExisting(r ? r.name : null));
+    getPdf(lease.id).then((r) => setHasLeasePdf(!!r));
+  }, [lease.id]);
+
+  async function pullFromLeasePdf() {
+    if (!hasApiKey()) {
+      setPulling('Add your Anthropic API key in Settings first.');
+      return;
+    }
+    setPulling('Reading the lease PDF…');
+    try {
+      const rec = await getPdf(lease.id);
+      if (!rec) {
+        setPulling('No lease PDF is attached for this lease.');
+        return;
+      }
+      const extracted = await extractInsuranceFromPdf(rec.blob);
+      setForm((f) => mergeInsurance(f, extracted));
+      setPulling('Filled empty fields from the lease — review, then Save.');
+    } catch (e) {
+      setPulling('Could not read the lease: ' + (e instanceof Error ? e.message : 'unknown error'));
+    }
+  }
+
+  async function submit() {
+    if (file) await saveCoiPdf(lease.id, file);
+    else if (removeExisting) await deleteCoiPdf(lease.id);
+    onSave(form);
+  }
   const money = (k: keyof LeaseInsurance) => (e: React.ChangeEvent<HTMLInputElement>) =>
     set(k, e.target.value === '' ? undefined : parseFloat(e.target.value));
   const check = (k: keyof LeaseInsurance, label: string) => (
@@ -357,13 +493,21 @@ function CoiForm({
         className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
-          onSave(form);
+          submit();
         }}
       >
-        <div className="text-xs text-slate-500">
-          Landlord: <strong>{lease.counterparty || '—'}</strong>
-          {lease.property_name ? ` · Property: ${lease.property_name}` : ''}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs text-slate-500">
+            Landlord: <strong>{lease.counterparty || '—'}</strong>
+            {lease.property_name ? ` · Property: ${lease.property_name}` : ''}
+          </div>
+          {hasLeasePdf && (
+            <Button variant="ghost" onClick={pullFromLeasePdf}>
+              ✨ Pull from lease PDF
+            </Button>
+          )}
         </div>
+        {pulling && <div className="text-xs font-medium text-slate-600">{pulling}</div>}
 
         <Section title="Requirements & Parties">
           <Field label="Insurance Requirements">
@@ -476,6 +620,43 @@ function CoiForm({
               />
             </Field>
           </div>
+          <Field label="Certificate PDF (optional)">
+            <input
+              type="file"
+              accept="application/pdf,.pdf,image/*"
+              onChange={(e) => {
+                setFile(e.target.files?.[0] || null);
+                setRemoveExisting(false);
+              }}
+              className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
+            />
+            <div className="mt-1 flex items-center gap-3 text-xs">
+              {file ? (
+                <span className="text-slate-500">New: {file.name}</span>
+              ) : existing && !removeExisting ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => openCoiPdf(lease.id)}
+                    className="font-medium text-blue-600 hover:underline"
+                  >
+                    📎 View current ({existing})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRemoveExisting(true)}
+                    className="font-medium text-rose-600 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </>
+              ) : removeExisting ? (
+                <span className="text-rose-600">Will remove the attached certificate on save.</span>
+              ) : (
+                <span className="text-slate-400">Attach the signed certificate to keep it on file.</span>
+              )}
+            </div>
+          </Field>
           <Field label="Notes">
             <Textarea
               rows={2}

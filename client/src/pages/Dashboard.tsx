@@ -12,7 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import { api } from '../lib/api';
-import type { DashboardData } from '../lib/types';
+import type { DashboardData, Lease } from '../lib/types';
 import { usd, usdCompact, num, fmtDate, daysUntil } from '../lib/format';
 import { Card, StatCard, SectionTitle, Spinner } from '../components/ui';
 import { backendEnabled } from '../lib/auth';
@@ -26,6 +26,7 @@ const TIP_KEY = 'cretmdx:hideDataTip';
 
 export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [leases, setLeases] = useState<Lease[]>([]);
   const [error, setError] = useState<string>();
   const [mixBy, setMixBy] = useState<'type' | 'region'>('type');
   const [showTip, setShowTip] = useState(() => {
@@ -47,7 +48,15 @@ export default function Dashboard() {
 
   useEffect(() => {
     api.dashboard().then(setData).catch((e) => setError(String(e)));
+    api.leases().then(setLeases).catch(() => {});
   }, []);
+
+  // COI renewals: certificates already expired or lapsing within ~120 days.
+  const coiRenewals = leases
+    .map((l) => ({ lease: l, exp: l.insurance?.expiration_date, status: l.insurance?.coi_status }))
+    .filter((r) => r.exp && daysUntil(r.exp) <= 120)
+    .sort((a, b) => (a.exp || '').localeCompare(b.exp || ''))
+    .slice(0, 8);
 
   if (error) return <div className="p-8 text-rose-600">Failed to load: {error}</div>;
   if (!data) return <Spinner />;
@@ -262,6 +271,53 @@ export default function Dashboard() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card className="p-5">
+          <SectionTitle
+            action={
+              <Link to="/insurance" className="text-sm font-medium text-blue-600 hover:underline">
+                Manage COIs →
+              </Link>
+            }
+          >
+            Insurance Renewals
+          </SectionTitle>
+          {coiRenewals.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No certificates of insurance expiring in the next 120 days.
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {coiRenewals.map(({ lease, exp, status }) => {
+                const d = daysUntil(exp!);
+                return (
+                  <div key={lease.id} className="flex items-center justify-between py-2.5">
+                    <div>
+                      <div className="text-sm font-medium text-slate-800">{lease.lease_name}</div>
+                      <div className="text-xs text-slate-500">
+                        {lease.counterparty || '—'} · exp {fmtDate(exp)}
+                        {status ? ` · ${status}` : ''}
+                      </div>
+                    </div>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                        d < 0
+                          ? 'bg-rose-100 text-rose-700'
+                          : d <= 60
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {d < 0 ? `expired ${Math.abs(d)}d` : `${d} days`}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </Card>

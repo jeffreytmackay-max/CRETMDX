@@ -6,6 +6,7 @@
 const DB_NAME = 'cretmdx';
 const STORE = 'pdfs';
 const TXN_STORE = 'txnAttachments';
+const COI_STORE = 'coiPdfs'; // current Certificate of Insurance PDF, keyed by lease id
 
 interface StoredPdf {
   name: string;
@@ -27,7 +28,7 @@ function openDb(): Promise<IDBDatabase> {
       reject(new Error('IndexedDB unavailable'));
       return;
     }
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
@@ -35,6 +36,7 @@ function openDb(): Promise<IDBDatabase> {
         const s = db.createObjectStore(TXN_STORE, { keyPath: 'id', autoIncrement: true });
         s.createIndex('txnId', 'txnId', { unique: false });
       }
+      if (!db.objectStoreNames.contains(COI_STORE)) db.createObjectStore(COI_STORE);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -229,4 +231,68 @@ export async function deleteTxnAttachmentsFor(txnId: number): Promise<void> {
 
 export async function openTxnAttachment(att: TxnAttachment): Promise<void> {
   openBlob(att.blob);
+}
+
+// ---- COI certificate PDFs (one current cert per lease, device-local) ----
+export async function saveCoiPdf(leaseId: number, file: File): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(COI_STORE, 'readwrite');
+      tx.objectStore(COI_STORE).put({ name: file.name, type: file.type, blob: file } as StoredPdf, leaseId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch {
+    /* attachments unavailable in this environment */
+  }
+}
+
+export async function getCoiPdf(leaseId: number): Promise<StoredPdf | null> {
+  try {
+    const db = await openDb();
+    return await new Promise<StoredPdf | null>((resolve, reject) => {
+      const tx = db.transaction(COI_STORE, 'readonly');
+      const req = tx.objectStore(COI_STORE).get(leaseId);
+      req.onsuccess = () => resolve((req.result as StoredPdf) || null);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteCoiPdf(leaseId: number): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(COI_STORE, 'readwrite');
+      tx.objectStore(COI_STORE).delete(leaseId);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function listCoiPdfIds(): Promise<number[]> {
+  try {
+    const db = await openDb();
+    return await new Promise<number[]>((resolve, reject) => {
+      const tx = db.transaction(COI_STORE, 'readonly');
+      const req = tx.objectStore(COI_STORE).getAllKeys();
+      req.onsuccess = () => resolve((req.result as number[]) || []);
+      req.onerror = () => reject(req.error);
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function openCoiPdf(leaseId: number): Promise<boolean> {
+  const stored = await getCoiPdf(leaseId);
+  if (!stored) return false;
+  openBlob(stored.blob);
+  return true;
 }

@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { Lease } from './types';
+import type { Lease, LeaseInsurance } from './types';
 
 // Browser-only (BYOK) integration with Claude for abstracting lease PDFs and
 // translating foreign-language documents. The user's API key is stored only in
@@ -164,6 +164,89 @@ export async function abstractLeasePdf(file: File): Promise<LeaseAbstract> {
     .join('\n');
 
   return extractJson(text);
+}
+
+// ---- Insurance requirements extraction (from the lease document) ----
+const INSURANCE_INSTRUCTIONS = `Read the attached commercial lease and extract ONLY the tenant's
+INSURANCE REQUIREMENTS (the coverage the lease requires the tenant to carry and the certificate
+requirements). Do not invent terms that are not in the document.
+
+Return ONLY a single JSON object (no markdown, no prose, no code fences) with EXACTLY these keys:
+
+- "requirements": a concise plain-English summary of the required insurance (coverage types + limits).
+- "additional_insured": the exact parties the tenant must name as ADDITIONAL INSURED (landlord, property manager, lender, etc.), as written. "" if not specified.
+- "certificate_holder": who the certificate of insurance must be issued to / delivered to (name and address if given). "" if not specified.
+- "cgl_each_occurrence": Commercial General Liability required limit PER OCCURRENCE, as a NUMBER (e.g. 1000000). 0 if not specified.
+- "cgl_aggregate": Commercial General Liability GENERAL AGGREGATE limit, as a NUMBER. 0 if not specified.
+- "auto_liability": Automobile liability required limit (combined single limit), as a NUMBER. 0 if not specified.
+- "umbrella": Umbrella/Excess liability required limit, as a NUMBER. 0 if not specified.
+- "employers_liability": Employer's liability required limit, as a NUMBER. 0 if not specified.
+- "workers_comp": true if workers' compensation (statutory) is required, else false.
+- "property_required": true if the tenant must carry property / special-form / "all risk" coverage on its property or improvements, else false.
+- "waiver_of_subrogation": true if a waiver of subrogation is required, else false.
+- "primary_noncontributory": true if the tenant's coverage must be primary and non-contributory, else false.
+- "notes": any other insurance conditions worth noting (notice-of-cancellation days, rating requirement like "A-VII or better", who pays, etc.). "" if none.
+
+Use numbers (not strings) for numeric fields and 0 when a limit is not stated. Use true/false for the
+booleans. Output the JSON object and nothing else.`;
+
+interface InsuranceAbstract {
+  requirements?: string;
+  additional_insured?: string;
+  certificate_holder?: string;
+  cgl_each_occurrence?: number;
+  cgl_aggregate?: number;
+  auto_liability?: number;
+  umbrella?: number;
+  employers_liability?: number;
+  workers_comp?: boolean;
+  property_required?: boolean;
+  waiver_of_subrogation?: boolean;
+  primary_noncontributory?: boolean;
+  notes?: string;
+}
+
+// Read a lease PDF (or image) and return just its insurance requirements.
+export async function extractInsuranceFromPdf(file: Blob): Promise<LeaseInsurance> {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('No Anthropic API key set. Add one in Settings.');
+  const data = await fileToBase64(file as File);
+  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const resp = await client.messages.create({
+    model: MODEL,
+    max_tokens: 2000,
+    system: SYSTEM,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } },
+          { type: 'text', text: INSURANCE_INSTRUCTIONS },
+        ],
+      },
+    ],
+  });
+  const text = (resp.content as Array<{ type: string; text?: string }>)
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text || '')
+    .join('\n');
+  const a = extractJson(text) as unknown as InsuranceAbstract;
+  const out: LeaseInsurance = {
+    requirements: a.requirements || '',
+    additional_insured: a.additional_insured || '',
+    certificate_holder: a.certificate_holder || '',
+    cgl_each_occurrence: a.cgl_each_occurrence || 0,
+    cgl_aggregate: a.cgl_aggregate || 0,
+    auto_liability: a.auto_liability || 0,
+    umbrella: a.umbrella || 0,
+    employers_liability: a.employers_liability || 0,
+    workers_comp: !!a.workers_comp,
+    property_required: !!a.property_required,
+    waiver_of_subrogation: !!a.waiver_of_subrogation,
+    primary_noncontributory: !!a.primary_noncontributory,
+    notes: a.notes || '',
+  };
+  return out;
 }
 
 // Map the AI abstract onto our Lease shape for the edit form.
