@@ -206,6 +206,32 @@ interface InsuranceAbstract {
   notes?: string;
 }
 
+function respText(resp: { content: unknown }): string {
+  return (resp.content as Array<{ type: string; text?: string }>)
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text || '')
+    .join('\n');
+}
+
+function insuranceFromResponse(text: string): LeaseInsurance {
+  const a = extractJson(text) as unknown as InsuranceAbstract;
+  return {
+    requirements: a.requirements || '',
+    additional_insured: a.additional_insured || '',
+    certificate_holder: a.certificate_holder || '',
+    cgl_each_occurrence: a.cgl_each_occurrence || 0,
+    cgl_aggregate: a.cgl_aggregate || 0,
+    auto_liability: a.auto_liability || 0,
+    umbrella: a.umbrella || 0,
+    employers_liability: a.employers_liability || 0,
+    workers_comp: !!a.workers_comp,
+    property_required: !!a.property_required,
+    waiver_of_subrogation: !!a.waiver_of_subrogation,
+    primary_noncontributory: !!a.primary_noncontributory,
+    notes: a.notes || '',
+  };
+}
+
 // Read a lease PDF (or image) and return just its insurance requirements.
 export async function extractInsuranceFromPdf(file: Blob): Promise<LeaseInsurance> {
   const apiKey = getApiKey();
@@ -226,27 +252,36 @@ export async function extractInsuranceFromPdf(file: Blob): Promise<LeaseInsuranc
       },
     ],
   });
-  const text = (resp.content as Array<{ type: string; text?: string }>)
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text || '')
-    .join('\n');
-  const a = extractJson(text) as unknown as InsuranceAbstract;
-  const out: LeaseInsurance = {
-    requirements: a.requirements || '',
-    additional_insured: a.additional_insured || '',
-    certificate_holder: a.certificate_holder || '',
-    cgl_each_occurrence: a.cgl_each_occurrence || 0,
-    cgl_aggregate: a.cgl_aggregate || 0,
-    auto_liability: a.auto_liability || 0,
-    umbrella: a.umbrella || 0,
-    employers_liability: a.employers_liability || 0,
-    workers_comp: !!a.workers_comp,
-    property_required: !!a.property_required,
-    waiver_of_subrogation: !!a.waiver_of_subrogation,
-    primary_noncontributory: !!a.primary_noncontributory,
-    notes: a.notes || '',
-  };
-  return out;
+  return insuranceFromResponse(respText(resp));
+}
+
+// Fallback for devices without the PDF: extract insurance requirements from the
+// lease's synced abstract text / notes. Only as complete as that text.
+export async function extractInsuranceFromText(text: string): Promise<LeaseInsurance> {
+  const apiKey = getApiKey();
+  if (!apiKey) throw new Error('No Anthropic API key set. Add one in Settings.');
+  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const resp = await client.messages.create({
+    model: MODEL,
+    max_tokens: 2000,
+    system: SYSTEM,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text:
+              INSURANCE_INSTRUCTIONS +
+              '\n\nThere is no document attached; use ONLY the lease abstract / notes below. ' +
+              'If the notes do not mention a value, leave it empty/0/false.\n\nLEASE ABSTRACT / NOTES:\n\n' +
+              text,
+          },
+        ],
+      },
+    ],
+  });
+  return insuranceFromResponse(respText(resp));
 }
 
 // Map the AI abstract onto our Lease shape for the edit form.

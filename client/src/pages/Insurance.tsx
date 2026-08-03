@@ -25,7 +25,7 @@ import {
   openCoiPdf,
   getPdf,
 } from '../lib/pdfStore';
-import { hasApiKey, extractInsuranceFromPdf } from '../lib/ai';
+import { hasApiKey, extractInsuranceFromPdf, extractInsuranceFromText } from '../lib/ai';
 
 // Fill only the insurance fields that are currently empty (never overwrite
 // values already entered), used when pulling from the lease PDF.
@@ -91,21 +91,31 @@ export default function Insurance() {
       return;
     }
     setBanner('');
-    setBusy('Finding lease PDFs…');
-    const withPdf: { lease: Lease; blob: Blob }[] = [];
+    setBusy('Finding lease documents…');
+    // Prefer the actual lease PDF (device-local); fall back to the synced
+    // abstract notes so this still works on a device without the PDFs.
+    const sources: { lease: Lease; blob?: Blob; text?: string }[] = [];
     for (const l of leases) {
       const rec = await getPdf(l.id);
-      if (rec) withPdf.push({ lease: l, blob: rec.blob });
+      if (rec) sources.push({ lease: l, blob: rec.blob });
+      else if ((l.notes || '').trim().length > 40) sources.push({ lease: l, text: l.notes });
     }
-    if (withPdf.length === 0) {
+    if (sources.length === 0) {
       setBusy('');
-      setBanner('No lease PDFs are attached on this device, so there is nothing to read.');
+      setBanner(
+        'Nothing to read: no lease PDFs are stored on this device and no lease has abstract notes. ' +
+          'Either open a lease and use “Read a lease PDF…”, or run this on the device where you ' +
+          'uploaded the PDFs.',
+      );
       return;
     }
+    const pdfCount = sources.filter((s) => s.blob).length;
+    const noteCount = sources.length - pdfCount;
     if (
       !confirm(
-        `Read ${withPdf.length} lease PDF(s) with Claude to pull insurance requirements? This uses ` +
-          'your Anthropic API key (a few cents each) and only fills fields that are currently empty.',
+        `Read ${sources.length} lease(s) with Claude to pull insurance requirements` +
+          ` (${pdfCount} from PDF, ${noteCount} from abstract notes)? This uses your Anthropic API ` +
+          'key (a few cents each) and only fills fields that are currently empty.',
       )
     ) {
       setBusy('');
@@ -113,11 +123,13 @@ export default function Insurance() {
     }
     let filled = 0;
     let failed = 0;
-    for (let i = 0; i < withPdf.length; i++) {
-      const { lease, blob } = withPdf[i];
-      setBusy(`Reading ${i + 1} of ${withPdf.length}: ${lease.lease_name}…`);
+    for (let i = 0; i < sources.length; i++) {
+      const { lease, blob, text } = sources[i];
+      setBusy(`Reading ${i + 1} of ${sources.length}: ${lease.lease_name}…`);
       try {
-        const extracted = await extractInsuranceFromPdf(blob);
+        const extracted = blob
+          ? await extractInsuranceFromPdf(blob)
+          : await extractInsuranceFromText(text || '');
         const merged = mergeInsurance(lease.insurance || {}, extracted);
         await api.updateLease(lease.id, { insurance: merged });
         filled++;
@@ -128,9 +140,10 @@ export default function Insurance() {
     await load();
     setBusy('');
     setBanner(
-      `Pulled insurance from ${filled} lease PDF(s)` +
+      `Pulled insurance for ${filled} lease(s)` +
         (failed ? `, ${failed} could not be read` : '') +
-        '. Review each in the editor and verify against the lease.',
+        `. ${noteCount > 0 ? 'Notes-based ones are only as detailed as the abstract — ' : ''}` +
+        'review each in the editor and verify against the lease.',
     );
   }
 
@@ -468,6 +481,17 @@ function CoiForm({
     }
   }
 
+  async function readPickedPdf(f: File) {
+    setPulling(`Reading ${f.name}…`);
+    try {
+      const extracted = await extractInsuranceFromPdf(f);
+      setForm((fm) => mergeInsurance(fm, extracted));
+      setPulling('Filled empty fields from the PDF — review, then Save.');
+    } catch (e) {
+      setPulling('Could not read the PDF: ' + (e instanceof Error ? e.message : 'unknown error'));
+    }
+  }
+
   async function submit() {
     if (file) await saveCoiPdf(lease.id, file);
     else if (removeExisting) await deleteCoiPdf(lease.id);
@@ -501,10 +525,27 @@ function CoiForm({
             Landlord: <strong>{lease.counterparty || '—'}</strong>
             {lease.property_name ? ` · Property: ${lease.property_name}` : ''}
           </div>
-          {hasLeasePdf && (
-            <Button variant="ghost" onClick={pullFromLeasePdf}>
-              ✨ Pull from lease PDF
-            </Button>
+          {hasApiKey() && (
+            <div className="flex items-center gap-2">
+              {hasLeasePdf && (
+                <Button variant="ghost" onClick={pullFromLeasePdf}>
+                  ✨ Pull from lease PDF
+                </Button>
+              )}
+              <label className="cursor-pointer rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                📄 Read a lease PDF…
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) readPickedPdf(f);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            </div>
           )}
         </div>
         {pulling && <div className="text-xs font-medium text-slate-600">{pulling}</div>}
