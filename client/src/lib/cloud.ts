@@ -19,7 +19,7 @@ const LEASE_COLS = [
   'security_deposit', 'renewal_options', 'notice_period_months', 'status',
   'execution_date', 'rent_start_date', 'duration_months', 'usable_sqft',
   'loss_factor', 'building_type', 'property_use', 'lead_broker', 'rent_calc_type',
-  'currency', 'parking_spaces', 'parking_rate_monthly', 'notes', 'custom',
+  'currency', 'parking_spaces', 'parking_rate_monthly', 'notes', 'custom', 'insurance',
 ] as const;
 
 const TRANSACTION_COLS = [

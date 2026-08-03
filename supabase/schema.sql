@@ -62,9 +62,11 @@ create table if not exists public.leases (
   parking_rate_monthly numeric default 0,
   notes                text,
   custom               jsonb not null default '{}'::jsonb,
+  insurance            jsonb not null default '{}'::jsonb,
   created_at           timestamptz default now()
 );
 alter table public.leases add column if not exists custom jsonb not null default '{}'::jsonb;
+alter table public.leases add column if not exists insurance jsonb not null default '{}'::jsonb;
 
 create table if not exists public.transactions (
   id                bigint generated always as identity primary key,

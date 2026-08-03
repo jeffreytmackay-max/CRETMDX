@@ -67,6 +67,35 @@ export interface Lease {
   property_city?: string;
   property_state?: string;
   custom?: Record<string, unknown>; // user-defined custom fields
+  insurance?: LeaseInsurance; // certificate-of-insurance requirements & tracking
+}
+
+// Insurance requirements + Certificate of Insurance (COI) tracking for a lease.
+// Renewed annually per landlord; expiration_date drives the renewal workflow.
+export interface LeaseInsurance {
+  requirements?: string; // the lease's insurance clause / requirements text
+  carrier?: string; // name of the insurance company (insurer)
+  additional_insured?: string; // parties named as additional insured
+  certificate_holder?: string; // who the certificate is issued to (+ address)
+  // Coverage limits ($):
+  cgl_each_occurrence?: number; // Commercial General Liability — per occurrence
+  cgl_aggregate?: number; // General aggregate
+  auto_liability?: number; // Automobile liability (combined single limit)
+  umbrella?: number; // Umbrella / excess liability
+  employers_liability?: number; // Employer's liability
+  workers_comp?: boolean; // Workers' compensation required (statutory)
+  property_required?: boolean; // Property / special-form coverage required
+  waiver_of_subrogation?: boolean; // Waiver of subrogation required
+  primary_noncontributory?: boolean; // Primary & non-contributory required
+  // Policy + certificate:
+  policy_number?: string;
+  effective_date?: string; // policy effective date
+  expiration_date?: string; // policy expiration date (annual renewal)
+  coi_status?: string; // Not Required / Requested / Pending / On File / Expired
+  coi_received_date?: string; // date the current certificate was received
+  broker_name?: string; // insurance broker / agent
+  broker_contact?: string; // broker email / phone
+  notes?: string;
 }
 
 export interface Transaction {
