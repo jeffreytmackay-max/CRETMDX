@@ -28,6 +28,7 @@ import { propertyColumns, customColumns } from '../lib/tableColumns';
 import { getFieldDefs } from '../lib/fields';
 import type { FieldDef } from '../lib/types';
 import { regionForCountry, REGIONS } from '../lib/geo';
+import { downloadWorkbook, type Sheet } from '../lib/excel';
 
 type ReportKey =
   | 'summary'
@@ -37,7 +38,8 @@ type ReportKey =
   | 'obligations'
   | 'critical'
   | 'insurance'
-  | 'pipeline';
+  | 'pipeline'
+  | 'export';
 
 const REPORTS: { key: ReportKey; label: string }[] = [
   { key: 'summary', label: 'Portfolio Summary' },
@@ -48,6 +50,7 @@ const REPORTS: { key: ReportKey; label: string }[] = [
   { key: 'critical', label: 'Critical Dates' },
   { key: 'insurance', label: 'Insurance (COI)' },
   { key: 'pipeline', label: 'Deal Pipeline' },
+  { key: 'export', label: 'Excel Export' },
 ];
 
 const today = new Date().toLocaleDateString('en-US', {
@@ -342,7 +345,7 @@ export default function Reports() {
 
   if (loading) return <Spinner />;
 
-  const canCsv = report !== 'summary';
+  const canCsv = report !== 'summary' && report !== 'export';
   const reportTitle = REPORTS.find((r) => r.key === report)!.label;
 
   return (
@@ -462,6 +465,9 @@ export default function Reports() {
       {report === 'critical' && <CriticalReport rows={data.crit} />}
       {report === 'insurance' && <InsuranceReport leases={filteredLeases} />}
       {report === 'pipeline' && <PipelineReport rows={data.pipe} />}
+      {report === 'export' && (
+        <ExcelExportReport properties={filteredProperties} leases={filteredLeases} />
+      )}
 
       {/* Print footer (visible on paper) */}
       <div className="mt-8 hidden border-t border-slate-300 pt-2 text-[10px] uppercase tracking-wider text-slate-400 print:block">
@@ -941,6 +947,110 @@ function CriticalReport({ rows }: { rows: ReturnType<typeof criticalDates> }) {
           {rows.length === 0 && <tr><Td>No critical dates in the next 24 months.</Td></tr>}
         </tbody>
       </table>
+    </Card>
+  );
+}
+
+// Build the two-sheet workbook and download it. Honors the active filters.
+function buildExportSheets(properties: Property[], leases: Lease[]): Sheet[] {
+  const propsById = new Map(properties.map((p) => [p.id, p]));
+  const rentByProp = new Map<number, number>();
+  const leaseCount = new Map<number, number>();
+  for (const l of leases) {
+    if (l.property_id == null) continue;
+    leaseCount.set(l.property_id, (leaseCount.get(l.property_id) || 0) + 1);
+    if (l.status === 'Active')
+      rentByProp.set(l.property_id, (rentByProp.get(l.property_id) || 0) + (l.base_rent_annual || 0));
+  }
+
+  const propertySheet: Sheet = {
+    name: 'Properties',
+    headers: [
+      'Name', 'Address', 'City', 'State', 'Region', 'Zip', 'Country', 'Property Type',
+      'Ownership', 'Agile Office', 'Status', 'Rentable SF', 'Active Annual Rent', 'Lease Count',
+      'Latitude', 'Longitude', 'Notes',
+    ],
+    rows: properties.map((p) => [
+      p.name, p.address, p.city, p.state, regionForCountry(p.country), p.zip, p.country,
+      p.property_type, p.ownership, p.agile_office ? 'Yes' : 'No', p.status, p.rentable_sqft || 0,
+      Math.round(rentByProp.get(p.id) || 0), leaseCount.get(p.id) || 0,
+      Number.isFinite(Number(p.lat)) ? Number(p.lat) : '',
+      Number.isFinite(Number(p.lng)) ? Number(p.lng) : '',
+      p.notes || '',
+    ]),
+  };
+
+  const leaseSheet: Sheet = {
+    name: 'Leases',
+    headers: [
+      'Lease', 'Landlord', 'Property', 'City', 'State', 'Region', 'Lease Type', 'Role', 'Status',
+      'Commencement', 'Rent Start', 'Expiration', 'Term (mo)', 'Rentable SF', 'Base Rent/yr',
+      'Rent/SF', 'Escalation %', 'OpEx/SF', 'Free Rent (mo)', 'TI/SF', 'Security Deposit',
+      'Renewal Options', 'Notice (mo)', 'Building Type', 'Currency',
+      'COI Status', 'COI Policy Expiration', 'Insurance Carrier', 'Additional Insured',
+    ],
+    rows: leases.map((l) => {
+      const p = l.property_id != null ? propsById.get(l.property_id) : undefined;
+      const i = l.insurance || {};
+      const rentPsf = l.rentable_sqft ? (l.base_rent_annual || 0) / l.rentable_sqft : 0;
+      return [
+        l.lease_name, l.counterparty || '', p?.name || l.property_name || '',
+        p?.city || l.property_city || '', p?.state || l.property_state || '',
+        regionForCountry(p?.country), l.lease_type, l.role, l.status,
+        l.commencement_date || '', l.rent_start_date || '', l.expiration_date || '',
+        l.duration_months || 0, l.rentable_sqft || 0, Math.round(l.base_rent_annual || 0),
+        Number(rentPsf.toFixed(2)), l.escalation_pct || 0, l.opex_psf || 0, l.free_rent_months || 0,
+        l.ti_allowance_psf || 0, l.security_deposit || 0, l.renewal_options || '',
+        l.notice_period_months || 0, l.building_type || '', l.currency || 'USD',
+        i.coi_status || '', i.expiration_date || '', i.carrier || '', i.additional_insured || '',
+      ];
+    }),
+  };
+
+  return [propertySheet, leaseSheet];
+}
+
+function ExcelExportReport({ properties, leases }: { properties: Property[]; leases: Lease[] }) {
+  const today = new Date().toISOString().slice(0, 10);
+  function download() {
+    downloadWorkbook(`transmedics-portfolio-${today}.xls`, buildExportSheets(properties, leases));
+  }
+  return (
+    <Card className="p-6">
+      <SectionTitle>Detailed Excel Export</SectionTitle>
+      <p className="mb-4 max-w-2xl text-sm text-slate-600">
+        Download a single Excel workbook with two tabs — <strong>Properties</strong> and{' '}
+        <strong>Leases</strong> — containing the full detail for each record. The export reflects
+        the filters above, so you can export the whole portfolio or just a slice.
+      </p>
+      <div className="mb-5 flex flex-wrap gap-3">
+        <StatCard label="Properties in export" value={num(properties.length)} accent="blue" />
+        <StatCard label="Leases in export" value={num(leases.length)} accent="violet" />
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-lg border border-slate-200 p-4">
+          <div className="mb-1 text-sm font-semibold text-slate-800">Properties tab</div>
+          <p className="text-xs text-slate-500">
+            Name, address, city, state, region, zip, country, type, ownership, agile-office, status,
+            rentable SF, active annual rent, lease count, coordinates, notes.
+          </p>
+        </div>
+        <div className="rounded-lg border border-slate-200 p-4">
+          <div className="mb-1 text-sm font-semibold text-slate-800">Leases tab</div>
+          <p className="text-xs text-slate-500">
+            Lease, landlord, property, location, type/role/status, key dates, term, SF, base rent,
+            rent/SF, escalation, OpEx, free rent, TI, deposit, renewal, notice, building type,
+            currency, and COI status/expiration/carrier/additional-insured.
+          </p>
+        </div>
+      </div>
+      <div className="mt-5">
+        <Button onClick={download}>⤓ Download Excel workbook (.xls)</Button>
+        <p className="mt-2 text-xs text-slate-400">
+          Opens in Excel, Numbers, or Google Sheets. If Excel shows a format prompt, choose “Yes” to
+          open — it's a standard Excel XML workbook.
+        </p>
+      </div>
     </Card>
   );
 }
