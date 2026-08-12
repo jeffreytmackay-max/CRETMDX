@@ -27,6 +27,7 @@ import {
 } from '../components/ui';
 import { SortGroupBar } from '../components/SortGroupBar';
 import CustomFields, { CustomFieldsView } from '../components/CustomFields';
+import ActivityLog from '../components/ActivityLog';
 import ColumnPicker from '../components/ColumnPicker';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 import { useColumns, type ColumnDef } from '../lib/columns';
@@ -1156,6 +1157,15 @@ function LeaseForm({
         <div className="grid grid-cols-2 gap-3">
           <CustomFields entity="lease" value={form.custom} onChange={(c) => set('custom', c)} />
         </div>
+        <ActivityLog
+          entries={form.note_log || []}
+          onChange={(entries) => set('note_log', entries)}
+          persist={
+            form.id
+              ? (entries) => api.updateLease(form.id as number, { note_log: entries }).then(() => {})
+              : undefined
+          }
+        />
         <Field label="Original PDF (optional)">
           <input
             type="file"

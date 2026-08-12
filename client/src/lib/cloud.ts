@@ -9,7 +9,7 @@ import { getSupabase } from './supabase';
 const PROPERTY_COLS = [
   'name', 'address', 'city', 'state', 'zip', 'country', 'lat', 'lng',
   'property_type', 'rentable_sqft', 'status', 'ownership', 'agile_office', 'notes',
-  'custom',
+  'custom', 'note_log',
 ] as const;
 
 const LEASE_COLS = [
@@ -20,6 +20,7 @@ const LEASE_COLS = [
   'execution_date', 'rent_start_date', 'duration_months', 'usable_sqft',
   'loss_factor', 'building_type', 'property_use', 'lead_broker', 'rent_calc_type',
   'currency', 'parking_spaces', 'parking_rate_monthly', 'notes', 'custom', 'insurance',
+  'note_log',
 ] as const;
 
 const TRANSACTION_COLS = [

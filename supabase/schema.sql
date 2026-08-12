@@ -24,10 +24,12 @@ create table if not exists public.properties (
   agile_office  boolean default false,
   notes         text,
   custom        jsonb not null default '{}'::jsonb,
+  note_log      jsonb not null default '[]'::jsonb,
   created_at    timestamptz default now()
 );
 alter table public.properties add column if not exists agile_office boolean default false;
 alter table public.properties add column if not exists custom jsonb not null default '{}'::jsonb;
+alter table public.properties add column if not exists note_log jsonb not null default '[]'::jsonb;
 
 create table if not exists public.leases (
   id                   bigint generated always as identity primary key,
@@ -63,10 +65,12 @@ create table if not exists public.leases (
   notes                text,
   custom               jsonb not null default '{}'::jsonb,
   insurance            jsonb not null default '{}'::jsonb,
+  note_log             jsonb not null default '[]'::jsonb,
   created_at           timestamptz default now()
 );
 alter table public.leases add column if not exists custom jsonb not null default '{}'::jsonb;
 alter table public.leases add column if not exists insurance jsonb not null default '{}'::jsonb;
+alter table public.leases add column if not exists note_log jsonb not null default '[]'::jsonb;
 
 create table if not exists public.transactions (
   id                bigint generated always as identity primary key,

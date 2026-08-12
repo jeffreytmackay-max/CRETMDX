@@ -17,6 +17,7 @@ import { SortGroupBar } from '../components/SortGroupBar';
 import CustomFields, { CustomFieldsView } from '../components/CustomFields';
 import ColumnPicker from '../components/ColumnPicker';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import ActivityLog from '../components/ActivityLog';
 import { hasMapsKey, staticMapUrl } from '../lib/maps';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 import { useColumns, type ColumnDef } from '../lib/columns';
@@ -746,6 +747,15 @@ function PropertyForm({
             onChange={(c) => set('custom', c)}
           />
         </div>
+        <ActivityLog
+          entries={form.note_log || []}
+          onChange={(entries) => set('note_log', entries)}
+          persist={
+            form.id
+              ? (entries) => api.updateProperty(form.id as number, { note_log: entries }).then(() => {})
+              : undefined
+          }
+        />
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="ghost" onClick={onClose}>
             Cancel

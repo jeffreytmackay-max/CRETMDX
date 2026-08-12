@@ -15,6 +15,7 @@ export interface Property {
   agile_office?: boolean; // coworking / flex space such as Regus or WeWork
   notes?: string;
   custom?: Record<string, unknown>; // user-defined custom fields
+  note_log?: NoteEntry[]; // timestamped activity-log entries
 }
 
 // A user-defined custom field, applied to a record type (entity).
@@ -68,6 +69,7 @@ export interface Lease {
   property_state?: string;
   custom?: Record<string, unknown>; // user-defined custom fields
   insurance?: LeaseInsurance; // certificate-of-insurance requirements & tracking
+  note_log?: NoteEntry[]; // timestamped activity-log entries
 }
 
 // Insurance requirements + Certificate of Insurance (COI) tracking for a lease.
