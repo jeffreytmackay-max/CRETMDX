@@ -124,6 +124,15 @@ export interface Transaction {
   coi_status?: string; // Certificate of Insurance status
   deposit_status?: string; // Security deposit workflow status
   custom?: Record<string, unknown>; // user-defined custom fields
+  note_log?: NoteEntry[]; // timestamped activity-log entries
+}
+
+// A single dated note in a transaction's activity log.
+export interface NoteEntry {
+  id: string;
+  ts: string; // ISO timestamp of when the note was written
+  text: string;
+  author?: string; // signed-in user's email, when available
 }
 
 export interface DashboardData {

@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import type { Property, Lease, Transaction } from '../lib/types';
+import type { Property, Lease, Transaction, NoteEntry } from '../lib/types';
+import { currentEmail } from '../lib/auth';
 import { usdCompact, num, fmtDate } from '../lib/format';
 import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
 import CustomFields from '../components/CustomFields';
@@ -50,6 +51,13 @@ function parseLinks(s?: string): TxLink[] {
     .filter(Boolean)
     .map((url) => ({ name: '', url }));
 }
+// Format an ISO timestamp as a readable local date + time.
+function fmtStamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(+d)) return iso;
+  return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
 function serializeLinks(links: TxLink[]): string {
   const clean = links
     .map((l) => ({ name: l.name.trim(), url: l.url.trim() }))
@@ -511,6 +519,7 @@ export default function Transactions() {
                           <div className="text-xs text-slate-400">
                             {[t.space_type, t.market].filter(Boolean).join(' · ')}
                             {parseLinks(t.links).length > 0 && ` · 🔗 ${parseLinks(t.links).length}`}
+                            {(t.note_log?.length || 0) > 0 && ` · 💬 ${t.note_log!.length}`}
                           </div>
                           {(t.property_id || t.lease_id) && (
                             <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
@@ -837,6 +846,27 @@ function TxForm({
   const setLink = (i: number, patch: Partial<TxLink>) =>
     setLinks((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
 
+  // Timestamped activity log.
+  const [newNote, setNewNote] = useState('');
+  const [me, setMe] = useState('');
+  useEffect(() => {
+    currentEmail().then((e) => setMe(e || ''));
+  }, []);
+  const addNote = () => {
+    const text = newNote.trim();
+    if (!text) return;
+    const entry: NoteEntry = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ts: new Date().toISOString(),
+      text,
+      author: me || undefined,
+    };
+    setForm((f) => ({ ...f, note_log: [...(f.note_log || []), entry] }));
+    setNewNote('');
+  };
+  const removeNote = (id: string) =>
+    setForm((f) => ({ ...f, note_log: (f.note_log || []).filter((n) => n.id !== id) }));
+
   useEffect(() => {
     if (form.id) listTxnAttachments(form.id).then(setExisting);
   }, [form.id]);
@@ -1022,6 +1052,44 @@ function TxForm({
             onChange={(e) => set('notes', e.target.value)}
             placeholder="Context, next steps, key terms…"
           />
+        </Field>
+
+        <Field label="Activity Log (dated notes)">
+          <div className="flex items-start gap-2">
+            <div className="flex-1">
+              <Textarea
+                rows={2}
+                value={newNote}
+                onChange={(e) => setNewNote(e.target.value)}
+                placeholder="Add a dated note — stamped with the date/time when you add it…"
+              />
+            </div>
+            <Button variant="ghost" onClick={addNote}>
+              + Add
+            </Button>
+          </div>
+          {(form.note_log || []).length > 0 && (
+            <div className="mt-2 space-y-2">
+              {[...(form.note_log || [])].reverse().map((n) => (
+                <div key={n.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-slate-500">
+                      {fmtStamp(n.ts)}
+                      {n.author ? ` · ${n.author}` : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeNote(n.id)}
+                      className="text-xs text-rose-500 hover:underline"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                  <div className="whitespace-pre-wrap text-sm text-slate-700">{n.text}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </Field>
 
         <div className="grid grid-cols-2 gap-3">

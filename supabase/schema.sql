@@ -93,6 +93,7 @@ create table if not exists public.transactions (
   coi_status        text,
   deposit_status    text,
   custom            jsonb not null default '{}'::jsonb,
+  note_log          jsonb not null default '[]'::jsonb,
   created_at        timestamptz default now()
 );
 -- For projects created before these columns existed:
@@ -106,6 +107,7 @@ alter table public.transactions add column if not exists coi_status text;
 alter table public.transactions add column if not exists deposit_status text;
 alter table public.transactions add column if not exists lease_id bigint references public.leases(id) on delete set null;
 alter table public.transactions add column if not exists custom jsonb not null default '{}'::jsonb;
+alter table public.transactions add column if not exists note_log jsonb not null default '[]'::jsonb;
 
 -- ---------- Custom (user-defined) field definitions ----------
 create table if not exists public.field_defs (
