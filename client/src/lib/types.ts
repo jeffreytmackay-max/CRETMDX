@@ -12,6 +12,7 @@ export interface Property {
   rentable_sqft: number;
   status: string;
   ownership: string;
+  lease_expiration?: string; // expiration of the current/most-recently-connected lease
   agile_office?: boolean; // coworking / flex space such as Regus or WeWork
   notes?: string;
   custom?: Record<string, unknown>; // user-defined custom fields

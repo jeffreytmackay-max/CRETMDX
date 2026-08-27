@@ -967,13 +967,13 @@ function buildExportSheets(properties: Property[], leases: Lease[]): Sheet[] {
     name: 'Properties',
     headers: [
       'Name', 'Address', 'City', 'State', 'Region', 'Zip', 'Country', 'Property Type',
-      'Ownership', 'Agile Office', 'Status', 'Rentable SF', 'Active Annual Rent', 'Lease Count',
-      'Latitude', 'Longitude', 'Notes',
+      'Ownership', 'Agile Office', 'Status', 'Rentable SF', 'Lease Expiration',
+      'Active Annual Rent', 'Lease Count', 'Latitude', 'Longitude', 'Notes',
     ],
     rows: properties.map((p) => [
       p.name, p.address, p.city, p.state, regionForCountry(p.country), p.zip, p.country,
       p.property_type, p.ownership, p.agile_office ? 'Yes' : 'No', p.status, p.rentable_sqft || 0,
-      Math.round(rentByProp.get(p.id) || 0), leaseCount.get(p.id) || 0,
+      p.lease_expiration || '', Math.round(rentByProp.get(p.id) || 0), leaseCount.get(p.id) || 0,
       Number.isFinite(Number(p.lat)) ? Number(p.lat) : '',
       Number.isFinite(Number(p.lng)) ? Number(p.lng) : '',
       p.notes || '',

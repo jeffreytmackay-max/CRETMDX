@@ -8,8 +8,8 @@ import { getSupabase } from './supabase';
 
 const PROPERTY_COLS = [
   'name', 'address', 'city', 'state', 'zip', 'country', 'lat', 'lng',
-  'property_type', 'rentable_sqft', 'status', 'ownership', 'agile_office', 'notes',
-  'custom', 'note_log',
+  'property_type', 'rentable_sqft', 'status', 'ownership', 'lease_expiration',
+  'agile_office', 'notes', 'custom', 'note_log',
 ] as const;
 
 const LEASE_COLS = [

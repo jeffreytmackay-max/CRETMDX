@@ -232,8 +232,10 @@ export default function Properties() {
         key: 'lease_exp',
         label: 'Lease Exp.',
         group: 'From Leases',
-        render: (p) =>
-          nextExpByProperty.get(p.id) ? fmtDate(nextExpByProperty.get(p.id)!) : '—',
+        render: (p) => {
+          const exp = p.lease_expiration || nextExpByProperty.get(p.id);
+          return exp ? fmtDate(exp) : '—';
+        },
       },
       { key: 'status', label: 'Status', group: 'This tab', render: (p) => <Badge>{p.status}</Badge> },
       // Available but hidden by default:
@@ -691,6 +693,17 @@ function PropertyForm({
             />
           </Field>
         </div>
+        <Field label="Lease Expiration">
+          <Input
+            type="date"
+            value={form.lease_expiration || ''}
+            onChange={(e) => set('lease_expiration', e.target.value)}
+          />
+          <span className="mt-1 block text-xs text-slate-400">
+            Auto-set to the connected lease's expiration when you add/extend a lease on this
+            property; you can also override it here.
+          </span>
+        </Field>
         <div className="grid grid-cols-3 gap-3">
           <Field label="Country">
             <Select

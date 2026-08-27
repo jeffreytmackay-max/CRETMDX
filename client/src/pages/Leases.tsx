@@ -245,6 +245,18 @@ export default function Leases() {
     }
   }
 
+  // Connecting a lease/extension to a property overwrites that property's square
+  // footage and lease-expiration with the lease's values (only when the lease
+  // actually provides them, so a blank field never wipes existing data).
+  async function applyLeaseToProperty(lease: Partial<Lease>) {
+    const pid = lease.property_id;
+    if (pid == null || !Number.isFinite(pid)) return;
+    const patch: Partial<Property> = {};
+    if (lease.rentable_sqft) patch.rentable_sqft = lease.rentable_sqft;
+    if (lease.expiration_date) patch.lease_expiration = lease.expiration_date;
+    if (Object.keys(patch).length) await api.updateProperty(pid as number, patch);
+  }
+
   async function save(form: Partial<Lease>, file?: File | null) {
     // The property the lease was previously on (if reassigned) also needs a resync.
     const prevPropertyId = form.id ? editing?.property_id : undefined;
@@ -252,7 +264,9 @@ export default function Leases() {
     if (id) await api.updateLease(id, form);
     else id = (await api.createLease(form)).id;
     if (file && id) await savePdf(id, file);
-    await syncPropertiesSqft([form.property_id, prevPropertyId]);
+    await applyLeaseToProperty(form);
+    // Vacated property (on reassignment) still gets the fill-when-empty resync.
+    await syncPropertiesSqft([prevPropertyId]);
     setEditing(null);
     setEditingFile(null);
     load();
@@ -261,8 +275,8 @@ export default function Leases() {
     for (const { lease, file } of items) {
       const created = await api.createLease(lease);
       if (created?.id) await savePdf(created.id, file);
+      await applyLeaseToProperty(lease);
     }
-    await syncPropertiesSqft(items.map((it) => it.lease.property_id));
     setBatch(null);
     load();
   }

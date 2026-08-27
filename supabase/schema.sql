@@ -21,6 +21,7 @@ create table if not exists public.properties (
   rentable_sqft integer default 0,
   status        text default 'Active',
   ownership     text default 'Leased',
+  lease_expiration text,
   agile_office  boolean default false,
   notes         text,
   custom        jsonb not null default '{}'::jsonb,
@@ -28,6 +29,7 @@ create table if not exists public.properties (
   created_at    timestamptz default now()
 );
 alter table public.properties add column if not exists agile_office boolean default false;
+alter table public.properties add column if not exists lease_expiration text;
 alter table public.properties add column if not exists custom jsonb not null default '{}'::jsonb;
 alter table public.properties add column if not exists note_log jsonb not null default '[]'::jsonb;
 
