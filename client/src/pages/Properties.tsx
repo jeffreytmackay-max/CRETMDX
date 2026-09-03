@@ -19,6 +19,8 @@ import ColumnPicker from '../components/ColumnPicker';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import ActivityLog from '../components/ActivityLog';
 import { hasMapsKey, staticMapUrl } from '../lib/maps';
+import FilterBar, { applyFilters, customSelectFilters, type FilterDef } from '../components/FilterBar';
+import { usePersisted } from '../lib/uiState';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 import { useColumns, type ColumnDef } from '../lib/columns';
 import { customColumns } from '../lib/tableColumns';
@@ -82,10 +84,15 @@ export default function Properties() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Partial<Property> | null>(null);
-  const [sortKey, setSortKey] = useState('name');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [groupKey, setGroupKey] = useState('none');
-  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = usePersisted('cretmdx:prop:sortKey', 'name');
+  const [sortDir, setSortDir] = usePersisted<SortDir>('cretmdx:prop:sortDir', 'asc');
+  const [groupKey, setGroupKey] = usePersisted('cretmdx:prop:groupKey', 'none');
+  const [search, setSearch] = usePersisted('cretmdx:prop:search', '');
+  const [fieldFilters, setFieldFilters] = usePersisted<Record<string, string>>('cretmdx:prop:filters', {});
+  const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
+  useEffect(() => {
+    getFieldDefs('property').then(setPropDefs);
+  }, []);
 
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -149,15 +156,32 @@ export default function Properties() {
     return m;
   }, [leasesByProperty]);
 
+  const distinct = (vals: (string | undefined)[]) =>
+    Array.from(new Set(vals.filter((v): v is string => !!v))).sort();
+  const filterDefs = useMemo<FilterDef<Property>[]>(() => {
+    const base: FilterDef<Property>[] = [
+      { key: 'property_type', label: 'Type', options: PROPERTY_TYPES, get: (p) => p.property_type },
+      { key: 'ownership', label: 'Ownership', options: OWNERSHIP_TYPES, get: (p) => p.ownership },
+      { key: 'status', label: 'Status', options: STATUSES, get: (p) => p.status },
+      { key: 'region', label: 'Region', options: [...REGIONS, 'Other'], get: (p) => regionForCountry(p.country) },
+      { key: 'country', label: 'Country', options: distinct(properties.map((p) => p.country)), get: (p) => p.country },
+      { key: 'state', label: 'State', options: distinct(properties.map((p) => p.state)), get: (p) => p.state },
+      { key: 'agile', label: 'Agile Office', options: ['Yes', 'No'], get: (p) => (p.agile_office ? 'Yes' : 'No') },
+    ];
+    return [...base, ...customSelectFilters<Property>(propDefs)];
+  }, [properties, propDefs]);
+
   const filteredProperties = useMemo(() => {
+    let rows = applyFilters(properties, filterDefs, fieldFilters);
     const q = search.trim().toLowerCase();
-    if (!q) return properties;
-    return properties.filter((p) =>
-      [p.name, p.address, p.city, p.state, p.country, p.property_type, p.ownership, p.status]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q)),
-    );
-  }, [properties, search]);
+    if (q)
+      rows = rows.filter((p) =>
+        [p.name, p.address, p.city, p.state, p.country, p.property_type, p.ownership, p.status]
+          .filter(Boolean)
+          .some((v) => String(v).toLowerCase().includes(q)),
+      );
+    return rows;
+  }, [properties, search, filterDefs, fieldFilters]);
 
   const groups = useMemo(() => {
     const sorted = sortRows(filteredProperties, SORTS.find((s) => s.key === sortKey), sortDir);
@@ -166,10 +190,6 @@ export default function Properties() {
   }, [filteredProperties, sortKey, sortDir, groupKey]);
 
   // ---- Dynamic columns ----
-  const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
-  useEffect(() => {
-    getFieldDefs('property').then(setPropDefs);
-  }, []);
 
   const allColumns = useMemo<ColumnDef<Property>[]>(() => {
     const base: ColumnDef<Property>[] = [
@@ -331,6 +351,16 @@ export default function Properties() {
             />
           </div>
         </div>
+      </div>
+
+      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
+        <FilterBar
+          defs={filterDefs}
+          filters={fieldFilters}
+          setFilters={setFieldFilters}
+          shown={filteredProperties.length}
+          total={properties.length}
+        />
       </div>
 
       <Card className="overflow-x-auto scroll-touch">

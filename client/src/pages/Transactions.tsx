@@ -8,6 +8,8 @@ import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } f
 import CustomFields from '../components/CustomFields';
 import ColumnPicker from '../components/ColumnPicker';
 import { SortGroupBar } from '../components/SortGroupBar';
+import FilterBar, { customSelectFilters, type FilterDef } from '../components/FilterBar';
+import { usePersisted } from '../lib/uiState';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 import { useColumns, type ColumnDef } from '../lib/columns';
 import { propertyColumns, leaseColumns, customColumns } from '../lib/tableColumns';
@@ -220,13 +222,13 @@ export default function Transactions() {
   const leaseName = useMemo(() => new Map(leases.map((l) => [l.id, l.lease_name])), [leases]);
   const [editing, setEditing] = useState<Partial<Transaction> | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
-  const [view, setView] = useState<'board' | 'list'>('board');
-  const [sortKey, setSortKey] = useState('stage');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [groupKey, setGroupKey] = useState('none');
+  const [view, setView] = usePersisted<'board' | 'list'>('cretmdx:tx:view', 'board');
+  const [sortKey, setSortKey] = usePersisted('cretmdx:tx:sortKey', 'stage');
+  const [sortDir, setSortDir] = usePersisted<SortDir>('cretmdx:tx:sortDir', 'asc');
+  const [groupKey, setGroupKey] = usePersisted('cretmdx:tx:groupKey', 'none');
   const [importing, setImporting] = useState(false);
-  const [search, setSearch] = useState('');
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [search, setSearch] = usePersisted('cretmdx:tx:search', '');
+  const [filters, setFilters] = usePersisted<Record<string, string>>('cretmdx:tx:filters', {});
 
   // Field definitions (for custom select fields used in filters/groups/columns).
   const [txnDefs, setTxnDefs] = useState<FieldDef[]>([]);
@@ -243,9 +245,8 @@ export default function Transactions() {
     () => Array.from(new Set(txns.map((t) => t.assigned_to).filter(Boolean))).sort() as string[],
     [txns],
   );
-  type FilterDef = { key: string; label: string; options: string[]; get: (t: Transaction) => string | undefined };
-  const filterDefs = useMemo<FilterDef[]>(() => {
-    const base: FilterDef[] = [
+  const filterDefs = useMemo<FilterDef<Transaction>[]>(() => {
+    const base: FilterDef<Transaction>[] = [
       { key: 'stage', label: 'Stage', options: STAGES, get: (t) => t.stage },
       { key: 'type', label: 'Type', options: TYPES, get: (t) => t.type },
       { key: 'priority', label: 'Priority', options: PRIORITIES, get: (t) => t.priority },
@@ -254,15 +255,7 @@ export default function Transactions() {
       { key: 'coi_status', label: 'COI Status', options: COI_STATUSES, get: (t) => t.coi_status },
       { key: 'assigned_to', label: 'Assigned To', options: distinctAssigned, get: (t) => t.assigned_to },
     ];
-    const custom: FilterDef[] = txnDefs
-      .filter((d) => d.field_type === 'select')
-      .map((d) => ({
-        key: `custom:${d.field_key}`,
-        label: d.label,
-        options: (d.options || '').split(',').map((o) => o.trim()).filter(Boolean),
-        get: (t: Transaction) => String((t.custom?.[d.field_key] ?? '') || ''),
-      }));
-    return [...base, ...custom];
+    return [...base, ...customSelectFilters<Transaction>(txnDefs)];
   }, [txnDefs, distinctAssigned]);
 
   // Grouping/sorting: built-ins + related (Property, Lease) + custom selects.
@@ -297,7 +290,6 @@ export default function Transactions() {
     await load();
   }
 
-  const anyFilter = Object.values(filters).some((v) => v && v !== 'All');
   const filteredTxns = useMemo(() => {
     const q = search.trim().toLowerCase();
     return txns.filter((t) => {
@@ -512,36 +504,14 @@ export default function Transactions() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-white px-4 py-2 md:px-8">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Filter</span>
-        {filterDefs.map((fd) => (
-          <label key={fd.key} className="flex items-center gap-1 text-xs text-slate-500">
-            {fd.label}
-            <select
-              value={filters[fd.key] || 'All'}
-              onChange={(e) => setFilters((f) => ({ ...f, [fd.key]: e.target.value }))}
-              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-blue-500"
-            >
-              <option value="All">All</option>
-              {fd.options.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
-        {anyFilter && (
-          <button
-            onClick={() => setFilters({})}
-            className="text-xs font-medium text-blue-600 hover:underline"
-          >
-            Reset filters
-          </button>
-        )}
-        <span className="ml-auto text-xs text-slate-400">
-          {filteredTxns.length} of {txns.length}
-        </span>
+      <div className="border-b border-slate-200 bg-white px-4 py-2 md:px-8">
+        <FilterBar
+          defs={filterDefs}
+          filters={filters}
+          setFilters={setFilters}
+          shown={filteredTxns.length}
+          total={txns.length}
+        />
       </div>
 
       {view === 'list' && (

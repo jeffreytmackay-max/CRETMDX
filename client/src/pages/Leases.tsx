@@ -26,6 +26,8 @@ import {
   Textarea,
 } from '../components/ui';
 import { SortGroupBar } from '../components/SortGroupBar';
+import FilterBar, { applyFilters, customSelectFilters, type FilterDef } from '../components/FilterBar';
+import { usePersisted } from '../lib/uiState';
 import CustomFields, { CustomFieldsView } from '../components/CustomFields';
 import ActivityLog from '../components/ActivityLog';
 import ColumnPicker from '../components/ColumnPicker';
@@ -63,11 +65,18 @@ export default function Leases() {
   const [leases, setLeases] = useState<Lease[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<Filter>('all');
-  const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState('expiration_date');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [groupKey, setGroupKey] = useState('none');
+  const [filter, setFilter] = usePersisted<Filter>('cretmdx:lease:filter', 'all');
+  const [search, setSearch] = usePersisted('cretmdx:lease:search', '');
+  const [sortKey, setSortKey] = usePersisted('cretmdx:lease:sortKey', 'expiration_date');
+  const [sortDir, setSortDir] = usePersisted<SortDir>('cretmdx:lease:sortDir', 'asc');
+  const [groupKey, setGroupKey] = usePersisted('cretmdx:lease:groupKey', 'none');
+  const [fieldFilters, setFieldFilters] = usePersisted<Record<string, string>>('cretmdx:lease:filters', {});
+  const [leaseDefs, setLeaseDefs] = useState<FieldDef[]>([]);
+  const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
+  useEffect(() => {
+    getFieldDefs('lease').then(setLeaseDefs);
+    getFieldDefs('property').then(setPropDefs);
+  }, []);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Partial<Lease> | null>(null);
   const [editingFile, setEditingFile] = useState<File | null>(null);
@@ -118,6 +127,20 @@ export default function Leases() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const distinct = (vals: (string | undefined)[]) =>
+    Array.from(new Set(vals.filter((v): v is string => !!v))).sort();
+  const filterDefs = useMemo<FilterDef<Lease>[]>(() => {
+    const base: FilterDef<Lease>[] = [
+      { key: 'status', label: 'Status', options: distinct(leases.map((l) => l.status)), get: (l) => l.status },
+      { key: 'lease_type', label: 'Lease Type', options: distinct(leases.map((l) => l.lease_type)), get: (l) => l.lease_type },
+      { key: 'role', label: 'Role', options: distinct(leases.map((l) => l.role)), get: (l) => l.role },
+      { key: 'building_type', label: 'Building Type', options: distinct(leases.map((l) => l.building_type)), get: (l) => l.building_type },
+      { key: 'currency', label: 'Currency', options: distinct(leases.map((l) => l.currency)), get: (l) => l.currency },
+      { key: 'property', label: 'Property', options: distinct(leases.map((l) => l.property_name)), get: (l) => l.property_name },
+    ];
+    return [...base, ...customSelectFilters<Lease>(leaseDefs)];
+  }, [leases, leaseDefs]);
+
   const filtered = useMemo(() => {
     let rows = leases;
     if (filter === 'expiring')
@@ -127,6 +150,8 @@ export default function Leases() {
       });
     else if (filter === 'active') rows = rows.filter((l) => l.status === 'Active');
 
+    rows = applyFilters(rows, filterDefs, fieldFilters);
+
     const q = search.trim().toLowerCase();
     if (q)
       rows = rows.filter((l) =>
@@ -135,7 +160,7 @@ export default function Leases() {
           .some((v) => String(v).toLowerCase().includes(q)),
       );
     return rows;
-  }, [leases, filter, search]);
+  }, [leases, filter, search, filterDefs, fieldFilters]);
 
   const groups = useMemo(() => {
     const sorted = sortRows(filtered, SORTS.find((s) => s.key === sortKey), sortDir);
@@ -145,12 +170,6 @@ export default function Leases() {
 
   // ---- Dynamic columns ----
   const propsById = useMemo(() => new Map(properties.map((p) => [p.id, p])), [properties]);
-  const [leaseDefs, setLeaseDefs] = useState<FieldDef[]>([]);
-  const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
-  useEffect(() => {
-    getFieldDefs('lease').then(setLeaseDefs);
-    getFieldDefs('property').then(setPropDefs);
-  }, []);
 
   const allColumns = useMemo<ColumnDef<Lease>[]>(() => {
     const propCols = propertyColumns<Lease>(
@@ -346,6 +365,16 @@ export default function Leases() {
           groupChoices={GROUPS}
         />
         <ColumnPicker all={allColumns} visible={colKeys} onChange={setColKeys} onReset={resetCols} />
+      </div>
+
+      <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
+        <FilterBar
+          defs={filterDefs}
+          filters={fieldFilters}
+          setFilters={setFieldFilters}
+          shown={filtered.length}
+          total={leases.length}
+        />
       </div>
 
       <Card className="overflow-x-auto scroll-touch">
