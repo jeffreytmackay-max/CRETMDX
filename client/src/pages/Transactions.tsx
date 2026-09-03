@@ -144,6 +144,7 @@ const TX_GROUPS: GroupOption<Transaction>[] = [
   { key: 'priority', label: 'Priority', get: (t) => t.priority || '—', order: PRIORITIES },
   { key: 'progress', label: 'Status', get: (t) => t.progress || '—', order: PROGRESS },
   { key: 'space_type', label: 'Space Type', get: (t) => t.space_type || '—', order: SPACE_TYPES },
+  { key: 'coi_status', label: 'COI Status', get: (t) => t.coi_status || '—', order: COI_STATUSES },
   { key: 'assigned_to', label: 'Assigned To', get: (t) => t.assigned_to || '—' },
 ];
 
@@ -225,36 +226,9 @@ export default function Transactions() {
   const [groupKey, setGroupKey] = useState('none');
   const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState('');
+  const [filters, setFilters] = useState<Record<string, string>>({});
 
-  async function importTransactions(rows: Partial<Transaction>[]) {
-    for (const r of rows) await api.createTransaction(r);
-    await load();
-  }
-
-  const filteredTxns = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return txns;
-    return txns.filter((t) =>
-      [
-        t.name, t.type, t.stage, t.market, t.space_type, t.progress, t.priority,
-        t.assigned_to, t.coi_status, t.deposit_status,
-        t.property_id != null ? propName.get(t.property_id) : '',
-        t.lease_id != null ? leaseName.get(t.lease_id) : '',
-      ]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(q)),
-    );
-  }, [txns, search, propName, leaseName]);
-
-  const listGroups = useMemo(() => {
-    const sorted = sortRows(filteredTxns, TX_SORTS.find((s) => s.key === sortKey), sortDir);
-    const groupOpt = groupKey === 'none' ? undefined : TX_GROUPS.find((g) => g.key === groupKey);
-    return groupRows(sorted, groupOpt);
-  }, [filteredTxns, sortKey, sortDir, groupKey]);
-
-  // ---- Dynamic columns (List view) ----
-  const propsById = useMemo(() => new Map(properties.map((p) => [p.id, p])), [properties]);
-  const leasesById = useMemo(() => new Map(leases.map((l) => [l.id, l])), [leases]);
+  // Field definitions (for custom select fields used in filters/groups/columns).
   const [txnDefs, setTxnDefs] = useState<FieldDef[]>([]);
   const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
   const [leaseDefs, setLeaseDefs] = useState<FieldDef[]>([]);
@@ -263,6 +237,95 @@ export default function Transactions() {
     getFieldDefs('property').then(setPropDefs);
     getFieldDefs('lease').then(setLeaseDefs);
   }, []);
+
+  // Filterable dropdown fields = built-in selects + any custom "select" fields.
+  const distinctAssigned = useMemo(
+    () => Array.from(new Set(txns.map((t) => t.assigned_to).filter(Boolean))).sort() as string[],
+    [txns],
+  );
+  type FilterDef = { key: string; label: string; options: string[]; get: (t: Transaction) => string | undefined };
+  const filterDefs = useMemo<FilterDef[]>(() => {
+    const base: FilterDef[] = [
+      { key: 'stage', label: 'Stage', options: STAGES, get: (t) => t.stage },
+      { key: 'type', label: 'Type', options: TYPES, get: (t) => t.type },
+      { key: 'priority', label: 'Priority', options: PRIORITIES, get: (t) => t.priority },
+      { key: 'progress', label: 'Status', options: PROGRESS, get: (t) => t.progress },
+      { key: 'space_type', label: 'Space Type', options: SPACE_TYPES, get: (t) => t.space_type },
+      { key: 'coi_status', label: 'COI Status', options: COI_STATUSES, get: (t) => t.coi_status },
+      { key: 'assigned_to', label: 'Assigned To', options: distinctAssigned, get: (t) => t.assigned_to },
+    ];
+    const custom: FilterDef[] = txnDefs
+      .filter((d) => d.field_type === 'select')
+      .map((d) => ({
+        key: `custom:${d.field_key}`,
+        label: d.label,
+        options: (d.options || '').split(',').map((o) => o.trim()).filter(Boolean),
+        get: (t: Transaction) => String((t.custom?.[d.field_key] ?? '') || ''),
+      }));
+    return [...base, ...custom];
+  }, [txnDefs, distinctAssigned]);
+
+  // Grouping/sorting: built-ins + related (Property, Lease) + custom selects.
+  const txGroups = useMemo<GroupOption<Transaction>[]>(() => {
+    const relational: GroupOption<Transaction>[] = [
+      { key: 'property', label: 'Property', get: (t) => (t.property_id != null && propName.get(t.property_id)) || '—' },
+      { key: 'lease', label: 'Linked Lease', get: (t) => (t.lease_id != null && leaseName.get(t.lease_id)) || '—' },
+    ];
+    const custom: GroupOption<Transaction>[] = txnDefs
+      .filter((d) => d.field_type === 'select')
+      .map((d) => ({
+        key: `custom:${d.field_key}`,
+        label: d.label,
+        get: (t: Transaction) => String((t.custom?.[d.field_key] ?? '') || '') || '—',
+        order: (d.options || '').split(',').map((o) => o.trim()).filter(Boolean),
+      }));
+    return [...TX_GROUPS, ...relational, ...custom];
+  }, [txnDefs, propName, leaseName]);
+  const txSorts = useMemo<SortOption<Transaction>[]>(() => {
+    const custom: SortOption<Transaction>[] = txnDefs
+      .filter((d) => d.field_type === 'select')
+      .map((d) => ({
+        key: `custom:${d.field_key}`,
+        label: d.label,
+        get: (t: Transaction) => String((t.custom?.[d.field_key] ?? '') || ''),
+      }));
+    return [...TX_SORTS, ...custom];
+  }, [txnDefs]);
+
+  async function importTransactions(rows: Partial<Transaction>[]) {
+    for (const r of rows) await api.createTransaction(r);
+    await load();
+  }
+
+  const anyFilter = Object.values(filters).some((v) => v && v !== 'All');
+  const filteredTxns = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return txns.filter((t) => {
+      for (const fd of filterDefs) {
+        const sel = filters[fd.key];
+        if (sel && sel !== 'All' && String(fd.get(t) || '') !== sel) return false;
+      }
+      if (!q) return true;
+      return [
+        t.name, t.type, t.stage, t.market, t.space_type, t.progress, t.priority,
+        t.assigned_to, t.coi_status, t.deposit_status,
+        t.property_id != null ? propName.get(t.property_id) : '',
+        t.lease_id != null ? leaseName.get(t.lease_id) : '',
+      ]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+  }, [txns, search, filters, filterDefs, propName, leaseName]);
+
+  const listGroups = useMemo(() => {
+    const sorted = sortRows(filteredTxns, txSorts.find((s) => s.key === sortKey), sortDir);
+    const groupOpt = groupKey === 'none' ? undefined : txGroups.find((g) => g.key === groupKey);
+    return groupRows(sorted, groupOpt);
+  }, [filteredTxns, sortKey, sortDir, groupKey, txSorts, txGroups]);
+
+  // ---- Dynamic columns (List view) ----
+  const propsById = useMemo(() => new Map(properties.map((p) => [p.id, p])), [properties]);
+  const leasesById = useMemo(() => new Map(leases.map((l) => [l.id, l])), [leases]);
 
   const allColumns = useMemo<ColumnDef<Transaction>[]>(() => {
     const native: ColumnDef<Transaction>[] = [
@@ -359,9 +422,9 @@ export default function Transactions() {
   const byStage = useMemo(() => {
     const m: Record<string, Transaction[]> = {};
     for (const s of STAGES) m[s] = [];
-    for (const t of txns) (m[t.stage] ||= []).push(t);
+    for (const t of filteredTxns) (m[t.stage] ||= []).push(t);
     return m;
-  }, [txns]);
+  }, [filteredTxns]);
 
   const totals = useMemo(() => {
     const open = txns.filter((t) => t.stage !== 'Completed');
@@ -449,6 +512,38 @@ export default function Transactions() {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-200 bg-white px-4 py-2 md:px-8">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Filter</span>
+        {filterDefs.map((fd) => (
+          <label key={fd.key} className="flex items-center gap-1 text-xs text-slate-500">
+            {fd.label}
+            <select
+              value={filters[fd.key] || 'All'}
+              onChange={(e) => setFilters((f) => ({ ...f, [fd.key]: e.target.value }))}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 outline-none focus:border-blue-500"
+            >
+              <option value="All">All</option>
+              {fd.options.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+        {anyFilter && (
+          <button
+            onClick={() => setFilters({})}
+            className="text-xs font-medium text-blue-600 hover:underline"
+          >
+            Reset filters
+          </button>
+        )}
+        <span className="ml-auto text-xs text-slate-400">
+          {filteredTxns.length} of {txns.length}
+        </span>
+      </div>
+
       {view === 'list' && (
         <div className="flex-1 overflow-y-auto scroll-touch p-4 md:p-6">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -459,8 +554,8 @@ export default function Transactions() {
               setSortDir={setSortDir}
               groupKey={groupKey}
               setGroupKey={setGroupKey}
-              sortChoices={TX_SORTS}
-              groupChoices={TX_GROUPS}
+              sortChoices={txSorts}
+              groupChoices={txGroups}
             />
             <div className="flex items-center gap-2">
               <ColumnPicker all={allColumns} visible={colKeys} onChange={setColKeys} onReset={resetCols} />
