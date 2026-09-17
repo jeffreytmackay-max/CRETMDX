@@ -5,6 +5,8 @@ import type { Property, Lease, Transaction, NoteEntry } from '../lib/types';
 import ActivityLog, { fmtStamp } from '../components/ActivityLog';
 import { usdCompact, num, fmtDate } from '../lib/format';
 import { downloadWorkbook, type Sheet } from '../lib/excel';
+import { exportSlidesPdf } from '../lib/slidePdf';
+import { exportSlidesPptx } from '../lib/slidePptx';
 import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
 import CustomFields from '../components/CustomFields';
 import ColumnPicker from '../components/ColumnPicker';
@@ -377,6 +379,27 @@ export default function Transactions() {
     );
   }
 
+  // One branded 16:9 slide per filtered transaction — PDF (print) or editable PPTX.
+  const [pptxBusy, setPptxBusy] = useState(false);
+  function slidesPdf() {
+    const ok = exportSlidesPdf(filteredTxns, propName, leaseName, txnDefs);
+    if (!ok) alert('Please allow pop-ups for this site to open the slide deck, then try again.');
+  }
+  async function slidesPptx() {
+    setPptxBusy(true);
+    try {
+      await exportSlidesPptx(filteredTxns, propName, leaseName, txnDefs);
+    } catch (e) {
+      alert('Could not build the PowerPoint: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setPptxBusy(false);
+    }
+  }
+  function closeMenu(el: HTMLElement) {
+    const d = el.closest('details') as HTMLDetailsElement | null;
+    if (d) d.open = false;
+  }
+
   const filteredTxns = useMemo(() => {
     const q = search.trim().toLowerCase();
     return txns.filter((t) => {
@@ -575,9 +598,40 @@ export default function Transactions() {
           <Button variant="ghost" onClick={() => setImporting(true)}>
             ⤒ Import CSV
           </Button>
-          <Button variant="ghost" onClick={exportReport}>
-            ⤓ Export report
-          </Button>
+          <details className="relative">
+            <summary className="flex cursor-pointer list-none items-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+              ⤓ Export {pptxBusy ? '…' : '▾'}
+            </summary>
+            <div className="absolute right-0 z-30 mt-1 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+              <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Filtered set · {filteredTxns.length} transaction{filteredTxns.length === 1 ? '' : 's'}
+              </div>
+              <button
+                onClick={(e) => { closeMenu(e.currentTarget); exportReport(); }}
+                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+              >
+                <span className="font-medium">Excel workbook</span>
+                <span className="block text-xs text-slate-400">All detail + comments (.xls)</span>
+              </button>
+              <button
+                onClick={(e) => { closeMenu(e.currentTarget); slidesPdf(); }}
+                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+              >
+                <span className="font-medium">Slide deck — PDF</span>
+                <span className="block text-xs text-slate-400">One branded slide per deal · Save as PDF</span>
+              </button>
+              <button
+                onClick={(e) => { closeMenu(e.currentTarget); slidesPptx(); }}
+                disabled={pptxBusy}
+                className="block w-full rounded-lg px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+              >
+                <span className="font-medium">Slide deck — PowerPoint</span>
+                <span className="block text-xs text-slate-400">
+                  {pptxBusy ? 'Building…' : 'Editable, one slide per deal (.pptx)'}
+                </span>
+              </button>
+            </div>
+          </details>
           <Button
             onClick={() =>
               setEditing({
