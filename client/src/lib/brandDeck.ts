@@ -84,7 +84,6 @@ export function slideModelFor(
   const chips: { text: string; tone: ChipTone }[] = [{ text: t.stage || '—', tone: 'crimson' }];
   if (t.priority) chips.push({ text: `${t.priority} priority`, tone: priorityTone(t.priority) });
   if (t.progress) chips.push({ text: t.progress, tone: 'neutral' });
-  if (t.coi_status) chips.push({ text: `COI: ${t.coi_status}`, tone: 'slate' });
 
   const stats: SlideStat[] = [
     { value: t.target_sqft ? num(t.target_sqft) : '—', label: 'Target SF' },
@@ -107,7 +106,6 @@ export function slideModelFor(
     { label: 'Internal Lead', value: t.lead || '' },
     { label: 'Start Date', value: t.start_date ? fmtDate(t.start_date) : '' },
     { label: 'Target Close', value: t.target_close_date ? fmtDate(t.target_close_date) : '' },
-    { label: 'Security Deposit', value: t.deposit_status || '' },
   ];
   for (const d of [...defs].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))) {
     const v = customText(t.custom?.[d.field_key]);
