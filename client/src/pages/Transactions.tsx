@@ -1,9 +1,10 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import type { Property, Lease, Transaction } from '../lib/types';
-import ActivityLog from '../components/ActivityLog';
+import type { Property, Lease, Transaction, NoteEntry } from '../lib/types';
+import ActivityLog, { fmtStamp } from '../components/ActivityLog';
 import { usdCompact, num, fmtDate } from '../lib/format';
+import { downloadWorkbook, type Sheet } from '../lib/excel';
 import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
 import CustomFields from '../components/CustomFields';
 import ColumnPicker from '../components/ColumnPicker';
@@ -212,6 +213,82 @@ function rowToTxn(row: string[], fields: string[]): Partial<Transaction> {
   return t as Partial<Transaction>;
 }
 
+// --- Status-report export (Excel) ---
+// Dated activity-log entries for a transaction, oldest → newest.
+function txnComments(t: Transaction): NoteEntry[] {
+  return [...(t.note_log || [])].sort((a, b) => (a.ts || '').localeCompare(b.ts || ''));
+}
+// All dated comments collapsed into one cell, each prefixed with its stamp.
+function commentsText(t: Transaction): string {
+  return txnComments(t)
+    .map((n) => `[${fmtStamp(n.ts)}${n.author ? ` · ${n.author}` : ''}] ${n.text}`)
+    .join('\n');
+}
+function fmtCustomValue(v: unknown): string | number {
+  if (v === true) return 'Yes';
+  if (v === false) return 'No';
+  if (v == null) return '';
+  if (typeof v === 'number') return v;
+  return String(v);
+}
+
+// Build the two-tab status-report workbook for the given (already-filtered)
+// transactions: a wide "Transactions" detail tab plus a "Comments" tab with one
+// row per dated note so every comment travels with the report.
+function buildTxnReportSheets(
+  txns: Transaction[],
+  propName: Map<number, string>,
+  leaseName: Map<number, string>,
+  defs: FieldDef[],
+): Sheet[] {
+  const customDefs = [...defs].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+  const txnSheet: Sheet = {
+    name: 'Transactions',
+    headers: [
+      'Name', 'Type', 'Stage', 'Status', 'Priority', 'Space Type', 'Region / Business Unit',
+      'Assigned To', 'External Broker', 'Internal Lead', 'Property', 'Linked Lease',
+      'Target SF', 'Est. Annual Cost', 'Confidence %', 'Date Needed By', 'Start Date',
+      'Target Close', 'COI Status', 'Security Deposit',
+      ...customDefs.map((d) => d.label),
+      'Notes', 'Comments', 'Last Comment', 'Comment Log',
+    ],
+    rows: txns.map((t) => {
+      const log = txnComments(t);
+      const last = log[log.length - 1];
+      return [
+        t.name, t.type, t.stage, t.progress || '', t.priority || '', t.space_type || '',
+        t.market || '', t.assigned_to || '', t.broker || '', t.lead || '',
+        t.property_id != null ? propName.get(t.property_id) || '' : '',
+        t.lease_id != null ? leaseName.get(t.lease_id) || '' : '',
+        t.target_sqft || 0, Math.round(t.estimated_value || 0), t.probability || 0,
+        t.date_needed_by || '', t.start_date || '', t.target_close_date || '',
+        t.coi_status || '', t.deposit_status || '',
+        ...customDefs.map((d) => fmtCustomValue(t.custom?.[d.field_key])),
+        t.notes || '', log.length, last ? fmtStamp(last.ts) : '', commentsText(t),
+      ];
+    }),
+  };
+
+  const commentRows: (string | number)[][] = [];
+  for (const t of txns) {
+    // Preserve the free-form Notes field as an undated first row.
+    if (t.notes && t.notes.trim()) {
+      commentRows.push([t.name, t.stage, t.assigned_to || '', '', '(general notes)', t.notes]);
+    }
+    for (const n of txnComments(t)) {
+      commentRows.push([t.name, t.stage, t.assigned_to || '', fmtStamp(n.ts), n.author || '', n.text]);
+    }
+  }
+  const commentsSheet: Sheet = {
+    name: 'Comments',
+    headers: ['Transaction', 'Stage', 'Assigned To', 'Date / Time', 'Author', 'Comment'],
+    rows: commentRows,
+  };
+
+  return [txnSheet, commentsSheet];
+}
+
 export default function Transactions() {
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -288,6 +365,16 @@ export default function Transactions() {
   async function importTransactions(rows: Partial<Transaction>[]) {
     for (const r of rows) await api.createTransaction(r);
     await load();
+  }
+
+  // Export the currently-filtered transactions (all detail + dated comments) to
+  // an Excel workbook — a portable status report that honors the active filters.
+  function exportReport() {
+    const today = new Date().toISOString().slice(0, 10);
+    downloadWorkbook(
+      `transmedics-transactions-${today}.xls`,
+      buildTxnReportSheets(filteredTxns, propName, leaseName, txnDefs),
+    );
   }
 
   const filteredTxns = useMemo(() => {
@@ -487,6 +574,9 @@ export default function Transactions() {
           </div>
           <Button variant="ghost" onClick={() => setImporting(true)}>
             ⤒ Import CSV
+          </Button>
+          <Button variant="ghost" onClick={exportReport}>
+            ⤓ Export report
           </Button>
           <Button
             onClick={() =>
