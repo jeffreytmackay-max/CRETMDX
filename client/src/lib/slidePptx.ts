@@ -92,8 +92,12 @@ function drawSlide(pptx: any, slide: any, m: SlideModel, dateLabel: string, page
   });
 
   // Lower area: Deal Detail (left, two sub-columns) + Latest Activity (right).
+  // Reserve a bottom band for the Documents & Links row when the record has any.
+  const hasLinks = m.links.length > 0;
+  const docsY = 6.4;
   const lowerTop = statTop + 1.45;
-  const lowerH = 7.5 - lowerTop - 0.45;
+  const lowerBottom = hasLinks ? docsY - 0.2 : 7.05;
+  const lowerH = lowerBottom - (lowerTop + 0.45);
   const leftW = 7.3;
   const rightX = MARGIN + leftW + 0.4;
   const rightW = PAGE_W - MARGIN - rightX;
@@ -155,6 +159,28 @@ function drawSlide(pptx: any, slide: any, m: SlideModel, dateLabel: string, page
     x: rightX, y: lowerTop + 0.45, w: rightW, h: lowerH,
     fontFace: DECK_FONT, valign: 'top', lineSpacingMultiple: 1.05,
   });
+
+  // Documents & Links — clickable hyperlinks along the bottom band.
+  if (hasLinks) {
+    slide.addText('DOCUMENTS & LINKS', {
+      x: MARGIN, y: docsY, w: PAGE_W - MARGIN * 2, h: 0.26,
+      fontFace: DECK_FONT, fontSize: 10, bold: true, color: DECK.slate, charSpacing: 2,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const linkRuns: any[] = [];
+    const shownLinks = m.links.slice(0, 6);
+    shownLinks.forEach((l, i) => {
+      linkRuns.push({
+        text: `${l.label}  ↗`,
+        options: { fontSize: 11, bold: true, color: DECK.crimson, hyperlink: { url: l.href } },
+      });
+      if (i < shownLinks.length - 1) linkRuns.push({ text: '      ', options: { fontSize: 11 } });
+    });
+    slide.addText(linkRuns, {
+      x: MARGIN, y: docsY + 0.28, w: PAGE_W - MARGIN * 2, h: 0.32,
+      fontFace: DECK_FONT, valign: 'top',
+    });
+  }
 
   // Footer: confidentiality line + date / page.
   slide.addText(CONFIDENTIAL, {

@@ -69,6 +69,20 @@ function slideHtml(m: SlideModel, dateLabel: string, page: number, total: number
     )
     .join('');
 
+  const docs = m.links.length
+    ? `<div class="docs">
+        <div class="docs-label">Documents &amp; Links</div>
+        <div class="docs-list">
+          ${m.links
+            .map(
+              (l) =>
+                `<a class="doclink" href="${esc(l.href)}" target="_blank" rel="noreferrer">${esc(l.label)} <span class="ext">&#8599;</span></a>`,
+            )
+            .join('')}
+        </div>
+      </div>`
+    : '';
+
   const activity =
     m.comments.length > 0
       ? m.comments
@@ -106,6 +120,7 @@ function slideHtml(m: SlideModel, dateLabel: string, page: number, total: number
           <div class="notes">${activity}</div>
         </div>
       </div>
+      ${docs}
     </div>
     <div class="footer">
       <span class="confidential">${CONFIDENTIAL}</span>
@@ -170,6 +185,12 @@ export function buildDeckHtml(
   .note-meta { font-weight: 700; font-size: 11px; color: #${DECK.slate}; }
   .note-text { font-size: 14px; line-height: 1.5; color: #${DECK.charcoal}; margin-top: 3px; white-space: pre-wrap; }
   .note-empty { font-size: 14px; color: #${DECK.gray}; font-style: italic; }
+
+  .docs { margin-top: 18px; }
+  .docs-label { font-weight: 800; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: #${DECK.slate}; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #${DECK.warmGray}; }
+  .docs-list { display: flex; flex-wrap: wrap; gap: 8px; }
+  .doclink { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; color: #${DECK.crimson}; text-decoration: none; background: #${DECK.cream}; border: 1px solid #${DECK.warmGray}; padding: 7px 14px; border-radius: 999px; }
+  .doclink .ext { color: #${DECK.rose}; font-weight: 700; }
 
   .footer { position: absolute; left: 84px; right: 84px; bottom: 26px; display: flex; justify-content: space-between; align-items: center; z-index: 2; }
   .confidential { font-weight: 800; font-size: 10px; letter-spacing: 0.14em; color: #${DECK.gray}; }

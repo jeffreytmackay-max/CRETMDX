@@ -7,6 +7,7 @@ import { usdCompact, num, fmtDate } from '../lib/format';
 import { downloadWorkbook, type Sheet } from '../lib/excel';
 import { exportSlidesPdf } from '../lib/slidePdf';
 import { exportSlidesPptx } from '../lib/slidePptx';
+import { parseLinks, serializeLinks, linkHref, type TxLink } from '../lib/links';
 import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
 import CustomFields from '../components/CustomFields';
 import ColumnPicker from '../components/ColumnPicker';
@@ -27,41 +28,6 @@ import {
   openTxnAttachment,
   type TxnAttachment,
 } from '../lib/pdfStore';
-
-// Links are stored in the transaction's `links` text column as a JSON array of
-// { name, url }. Older records may hold plain newline/comma-separated URLs, so
-// parse both shapes.
-interface TxLink {
-  name: string;
-  url: string;
-}
-function parseLinks(s?: string): TxLink[] {
-  const t = (s || '').trim();
-  if (!t) return [];
-  if (t.startsWith('[')) {
-    try {
-      const arr = JSON.parse(t);
-      if (Array.isArray(arr)) {
-        return arr
-          .map((x) => ({ name: String(x?.name || ''), url: String(x?.url || '') }))
-          .filter((x) => x.url);
-      }
-    } catch {
-      /* fall through to legacy parsing */
-    }
-  }
-  return t
-    .split(/[\n,]/)
-    .map((x) => x.trim())
-    .filter(Boolean)
-    .map((url) => ({ name: '', url }));
-}
-function serializeLinks(links: TxLink[]): string {
-  const clean = links
-    .map((l) => ({ name: l.name.trim(), url: l.url.trim() }))
-    .filter((l) => l.url);
-  return clean.length ? JSON.stringify(clean) : '';
-}
 
 // Device-local safety net for links, keyed by transaction id. Guarantees links
 // persist across reloads even if the cloud `links` column isn't there yet; the
@@ -86,9 +52,6 @@ function setLocalLinks(id: number, val: string): void {
   } catch {
     /* storage unavailable */
   }
-}
-function linkHref(url: string): string {
-  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
 }
 
 // Internal corporate real estate (occupier) workflow, matching the lease-tracker

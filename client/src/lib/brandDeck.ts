@@ -7,6 +7,7 @@
 import type { Property, Lease, Transaction, FieldDef } from './types';
 import { usd, num, fmtDate } from './format';
 import { fmtStamp } from '../components/ActivityLog';
+import { parseLinks, linkHref, linkLabel } from './links';
 
 // Palette (hex without '#', for reuse by pptxgenjs which wants bare hex).
 export const DECK = {
@@ -45,6 +46,10 @@ export interface SlideComment {
   author: string;
   text: string;
 }
+export interface SlideLink {
+  label: string;
+  href: string;
+}
 export interface SlideModel {
   eyebrow: string;
   title: string;
@@ -54,6 +59,7 @@ export interface SlideModel {
   fields: SlideField[];
   comments: SlideComment[];
   notes: string;
+  links: SlideLink[];
 }
 
 function priorityTone(p?: string): ChipTone {
@@ -118,6 +124,11 @@ export function slideModelFor(
     .slice(0, 4)
     .map((n) => ({ stamp: fmtStamp(n.ts), author: n.author || '', text: n.text }));
 
+  const links: SlideLink[] = parseLinks(t.links).map((l) => ({
+    label: linkLabel(l),
+    href: linkHref(l.url),
+  }));
+
   return {
     eyebrow: `Real Estate Transaction · ${t.stage || ''}`.toUpperCase(),
     title: t.name || 'Untitled Transaction',
@@ -127,6 +138,7 @@ export function slideModelFor(
     fields,
     comments,
     notes: (t.notes || '').trim(),
+    links,
   };
 }
 
