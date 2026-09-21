@@ -128,8 +128,26 @@ export interface Transaction {
   coi_status?: string; // Certificate of Insurance status
   deposit_status?: string; // Security deposit workflow status
   legal_rep?: string; // legal representative / counsel on the deal
+  budgeted?: boolean; // whether the deal is within an approved budget (drives DOA)
+  approvals?: Approval[]; // recorded DOA sign-offs
+  process?: Record<string, ProcessState>; // guided process-checklist state, by step id
   custom?: Record<string, unknown>; // user-defined custom fields
   note_log?: NoteEntry[]; // timestamped activity-log entries
+}
+
+// A recorded Delegation-of-Authority sign-off against a required approver role.
+export interface Approval {
+  role: string; // required role, e.g. "CFO"
+  approver?: string; // person who approved
+  date?: string; // ISO date of approval
+}
+
+// State of a single guided-process step: a task's done flag, or a decision's
+// selected answer, with an optional timestamp.
+export interface ProcessState {
+  done?: boolean;
+  answer?: string;
+  date?: string;
 }
 
 // A single dated note in a transaction's activity log.

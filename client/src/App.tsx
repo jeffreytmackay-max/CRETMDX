@@ -7,6 +7,7 @@ import MapView from './pages/MapView';
 import Leases from './pages/Leases';
 import Insurance from './pages/Insurance';
 import Transactions from './pages/Transactions';
+import Process from './pages/Process';
 import Financial from './pages/Financial';
 import Compare from './pages/Compare';
 import Reports from './pages/Reports';
@@ -25,6 +26,7 @@ const NAV = [
   { to: '/insurance', label: 'Insurance (COI)', icon: '🛡' },
   { to: '/compare', label: 'Compare Leases', icon: '⊞' },
   { to: '/transactions', label: 'Transactions', icon: '⇄' },
+  { to: '/process', label: 'Transaction Process', icon: '❏' },
   { to: '/financial', label: 'Financial Modeling', icon: '∑' },
   { to: '/reports', label: 'Reports', icon: '🗎' },
   { to: '/settings', label: 'Settings', icon: '⚙' },
@@ -147,6 +149,7 @@ export default function App() {
           <Route path="/leases" element={<Leases />} />
           <Route path="/insurance" element={<Insurance />} />
           <Route path="/transactions" element={<Transactions />} />
+          <Route path="/process" element={<Process />} />
           <Route path="/financial" element={<Financial />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/reports" element={<Reports />} />

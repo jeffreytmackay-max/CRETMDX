@@ -28,7 +28,8 @@ const TRANSACTION_COLS = [
   'estimated_value', 'term_years', 'probability', 'broker', 'lead', 'start_date',
   'target_close_date', 'notes', 'links',
   'space_type', 'progress', 'date_needed_by', 'priority', 'assigned_to',
-  'coi_status', 'deposit_status', 'legal_rep', 'custom', 'note_log',
+  'coi_status', 'deposit_status', 'legal_rep', 'budgeted', 'approvals', 'process',
+  'custom', 'note_log',
 ] as const;
 
 function pick<T extends object>(obj: Partial<T>, cols: readonly string[]): Record<string, unknown> {

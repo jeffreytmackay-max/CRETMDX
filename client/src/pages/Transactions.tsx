@@ -11,6 +11,19 @@ import { parseLinks, serializeLinks, linkHref, type TxLink } from '../lib/links'
 import { dealValue } from '../lib/deal';
 import PersonSelect from '../components/PersonSelect';
 import { getDirectory, addToDirectory, mergeOptions } from '../lib/directory';
+import {
+  STAGES,
+  STAGE_ACCENT,
+  TERMINAL_STAGE,
+  normalizeStage,
+  approvalStatus,
+  processProgress,
+  doaBand,
+  requiredRoles,
+} from '../lib/process';
+import ApprovalPanel from '../components/ApprovalPanel';
+import ProcessChecklist from '../components/ProcessChecklist';
+import LegalRouteHint from '../components/LegalRouteHint';
 import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
 import CustomFields from '../components/CustomFields';
 import ColumnPicker from '../components/ColumnPicker';
@@ -57,15 +70,8 @@ function setLocalLinks(id: number, val: string): void {
   }
 }
 
-// Internal corporate real estate (occupier) workflow, matching the lease-tracker
-// the team uses: from intake through site search, legal terms, execution, done.
-const STAGES = [
-  'To Be Assigned',
-  'Site Search',
-  'Negotiating Legal Terms',
-  'Lease Execution',
-  'Completed',
-];
+// Workflow stages, stage accents, and the process/approval model live in
+// lib/process (the single source of truth mirroring the team's flowchart).
 const TYPES = [
   'New Lease',
   'Renewal',
@@ -82,14 +88,6 @@ const PRIORITIES = ['High', 'Medium', 'Low'];
 const PROGRESS = ['Planning', 'In Progress', 'Complete'];
 const COI_STATUSES = ['Not Started', 'Sent to Landlord', 'Received', 'N/A'];
 
-const STAGE_ACCENT: Record<string, string> = {
-  'To Be Assigned': 'border-t-slate-400',
-  'Site Search': 'border-t-[#c45957]',
-  'Negotiating Legal Terms': 'border-t-[#ff7f41]',
-  'Lease Execution': 'border-t-amber-400',
-  Completed: 'border-t-emerald-600',
-};
-
 const PRIORITY_BADGE: Record<string, string> = {
   High: 'bg-rose-100 text-rose-700',
   Medium: 'bg-amber-100 text-amber-700',
@@ -98,7 +96,7 @@ const PRIORITY_BADGE: Record<string, string> = {
 const PRIORITY_RANK: Record<string, number> = { High: 0, Medium: 1, Low: 2 };
 
 const TX_SORTS: SortOption<Transaction>[] = [
-  { key: 'stage', label: 'Stage', get: (t) => STAGES.indexOf(t.stage) },
+  { key: 'stage', label: 'Stage', get: (t) => (STAGES as readonly string[]).indexOf(t.stage) },
   { key: 'name', label: 'Name', get: (t) => t.name || '' },
   { key: 'type', label: 'Type', get: (t) => t.type || '' },
   { key: 'priority', label: 'Priority', get: (t) => PRIORITY_RANK[t.priority || ''] ?? 99 },
@@ -111,7 +109,7 @@ const TX_SORTS: SortOption<Transaction>[] = [
 ];
 const TX_GROUPS: GroupOption<Transaction>[] = [
   { key: 'none', label: 'None', get: () => '' },
-  { key: 'stage', label: 'Stage', get: (t) => t.stage || '—', order: STAGES },
+  { key: 'stage', label: 'Stage', get: (t) => t.stage || '—', order: [...STAGES] },
   { key: 'type', label: 'Type', get: (t) => t.type || '—', order: TYPES },
   { key: 'priority', label: 'Priority', get: (t) => t.priority || '—', order: PRIORITIES },
   { key: 'progress', label: 'Status', get: (t) => t.progress || '—', order: PROGRESS },
@@ -179,7 +177,7 @@ function rowToTxn(row: string[], fields: string[]): Partial<Transaction> {
     else if (DATE_FIELDS.includes(f)) t[f] = csvDate(raw);
     else t[f] = raw;
   });
-  if (!t.stage) t.stage = 'To Be Assigned';
+  if (!t.stage) t.stage = 'Intake';
   if (!t.type) t.type = 'New Lease';
   return t as Partial<Transaction>;
 }
@@ -222,7 +220,7 @@ function buildTxnReportSheets(
       'Target SF', 'Est. Annual Cost', 'Lease Term (yrs)', 'Total Deal Value',
       'Confidence %', 'Date Needed By', 'Start Date',
       'Target Close', 'COI Status', 'Security Deposit',
-      'Legal Representative',
+      'Legal Representative', 'DOA Band', 'Required Approvers', 'Approval Status', 'Process %',
       ...customDefs.map((d) => d.label),
       'Notes', 'Comments', 'Last Comment', 'Comment Log',
     ],
@@ -238,7 +236,8 @@ function buildTxnReportSheets(
         Math.round(dealValue(t)) || '', t.probability || 0,
         t.date_needed_by || '', t.start_date || '', t.target_close_date || '',
         t.coi_status || '', t.deposit_status || '',
-        t.legal_rep || '',
+        t.legal_rep || '', doaBand(dealValue(t)).label, requiredRoles(t).join('; '),
+        approvalStatus(t).label, `${processProgress(t).pct}%`,
         ...customDefs.map((d) => fmtCustomValue(t.custom?.[d.field_key])),
         t.notes || '', log.length, last ? fmtStamp(last.ts) : '', commentsText(t),
       ];
@@ -299,7 +298,7 @@ export default function Transactions() {
   );
   const filterDefs = useMemo<FilterDef<Transaction>[]>(() => {
     const base: FilterDef<Transaction>[] = [
-      { key: 'stage', label: 'Stage', options: STAGES, get: (t) => t.stage },
+      { key: 'stage', label: 'Stage', options: [...STAGES], get: (t) => t.stage },
       { key: 'type', label: 'Type', options: TYPES, get: (t) => t.type },
       { key: 'priority', label: 'Priority', options: PRIORITIES, get: (t) => t.priority },
       { key: 'progress', label: 'Status', options: PROGRESS, get: (t) => t.progress },
@@ -478,6 +477,32 @@ export default function Transactions() {
       { key: 'coi_status', label: 'COI Status', group: 'This tab', defaultVisible: false, render: (t) => t.coi_status || '—' },
       { key: 'deposit_status', label: 'Deposit Status', group: 'This tab', defaultVisible: false, render: (t) => t.deposit_status || '—' },
       { key: 'legal_rep', label: 'Legal Rep', group: 'This tab', defaultVisible: false, render: (t) => t.legal_rep || '—' },
+      {
+        key: 'approval',
+        label: 'DOA Approval',
+        group: 'This tab',
+        defaultVisible: false,
+        render: (t) => {
+          const a = approvalStatus(t);
+          return (
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                a.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+              }`}
+            >
+              {a.label}
+            </span>
+          );
+        },
+      },
+      {
+        key: 'process_pct',
+        label: 'Process %',
+        group: 'This tab',
+        defaultVisible: false,
+        align: 'right',
+        render: (t) => `${processProgress(t).pct}%`,
+      },
       { key: 'target_close_date', label: 'Target Close', group: 'This tab', defaultVisible: false, render: (t) => fmtDate(t.target_close_date) },
     ];
     return [
@@ -504,8 +529,13 @@ export default function Transactions() {
 
   const load = async () => {
     const [tRaw, p, l] = await Promise.all([api.transactions(), api.properties(), api.leases()]);
-    // Prefer the cloud links value; fall back to the device-local copy.
-    const t = tRaw.map((x) => ({ ...x, links: x.links || getLocalLinks(x.id) }));
+    // Prefer the cloud links value; fall back to the device-local copy. Also
+    // map any legacy stage names onto the current workflow spine.
+    const t = tRaw.map((x) => ({
+      ...x,
+      stage: normalizeStage(x.stage),
+      links: x.links || getLocalLinks(x.id),
+    }));
     setTxns(t);
     setProperties(p);
     setLeases(l);
@@ -540,7 +570,7 @@ export default function Transactions() {
   }, [filteredTxns]);
 
   const totals = useMemo(() => {
-    const open = txns.filter((t) => t.stage !== 'Completed');
+    const open = txns.filter((t) => t.stage !== TERMINAL_STAGE);
     const annualCost = open.reduce((s, t) => s + (t.estimated_value || 0), 0);
     const dealTotal = open.reduce((s, t) => s + dealValue(t), 0);
     const sf = open.reduce((s, t) => s + (t.target_sqft || 0), 0);
@@ -648,7 +678,7 @@ export default function Transactions() {
           <Button
             onClick={() =>
               setEditing({
-                stage: 'To Be Assigned',
+                stage: 'Intake',
                 type: 'New Lease',
                 probability: 50,
                 priority: 'Medium',
@@ -867,6 +897,20 @@ export default function Transactions() {
                           {t.progress}
                         </span>
                       )}
+                      {(() => {
+                        const a = approvalStatus(t);
+                        if (!(a.done > 0 || t.stage === 'DOA Approval')) return null;
+                        return (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                              a.complete ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                            }`}
+                            title="DOA approval"
+                          >
+                            {a.label}
+                          </span>
+                        );
+                      })()}
                       {dealValue(t) > 0 ? (
                         <span
                           className="ml-auto text-sm font-semibold text-slate-700"
@@ -888,6 +932,14 @@ export default function Transactions() {
                           : fmtDate(t.target_close_date)}
                       </span>
                     </div>
+                    {(() => {
+                      const pr = processProgress(t);
+                      return pr.done > 0 ? (
+                        <div className="mt-2 h-1 rounded bg-slate-100" title={`Process ${pr.pct}% complete`}>
+                          <div className="h-1 rounded bg-emerald-500" style={{ width: `${pr.pct}%` }} />
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
                 ))}
                 {items.length === 0 && (
@@ -1207,7 +1259,7 @@ function TxForm({
               ))}
             </Select>
           </Field>
-          {form.stage === 'Completed' && !form.lease_id && (
+          {form.stage === TERMINAL_STAGE && !form.lease_id && (
             <div className="flex items-end pb-2 text-xs text-amber-600">
               Tip: link the lease this completed transaction produced.
             </div>
@@ -1257,6 +1309,8 @@ function TxForm({
             </div>
           </Field>
         </div>
+
+        <ApprovalPanel t={form as Transaction} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} />
         <div className="grid grid-cols-3 gap-3">
           <Field label="External Broker">
             <PersonSelect
@@ -1281,6 +1335,13 @@ function TxForm({
               onChange={(v) => set('legal_rep', v)}
               onAdd={(n) => onAddOption('legal_rep', n)}
             />
+            <LegalRouteHint
+              t={form}
+              onUse={(n) => {
+                onAddOption('legal_rep', n);
+                set('legal_rep', n);
+              }}
+            />
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -1295,6 +1356,8 @@ function TxForm({
             />
           </Field>
         </div>
+
+        <ProcessChecklist t={form as Transaction} onChange={(patch) => setForm((f) => ({ ...f, ...patch }))} />
 
         <Field label="Notes">
           <Textarea

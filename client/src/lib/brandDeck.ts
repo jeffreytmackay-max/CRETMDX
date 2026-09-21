@@ -9,6 +9,7 @@ import { usd, num, fmtDate } from './format';
 import { fmtStamp } from '../components/ActivityLog';
 import { parseLinks, linkHref, linkLabel } from './links';
 import { dealValue } from './deal';
+import { doaBand, approvalStatus, legalRoute } from './process';
 
 // Palette (hex without '#', for reuse by pptxgenjs which wants bare hex).
 export const DECK = {
@@ -114,6 +115,8 @@ export function slideModelFor(
     { label: 'External Broker', value: t.broker || '' },
     { label: 'Internal Lead', value: t.lead || '' },
     { label: 'Legal Representative', value: t.legal_rep || '' },
+    { label: 'Legal Routing', value: `${legalRoute(t).category} → ${legalRoute(t).route}` },
+    { label: 'DOA Approval', value: dv > 0 ? `${doaBand(dv).label} — ${approvalStatus(t).label}` : '' },
     { label: 'Confidence', value: t.probability ? `${t.probability}%` : '' },
     { label: 'Start Date', value: t.start_date ? fmtDate(t.start_date) : '' },
     { label: 'Target Close', value: t.target_close_date ? fmtDate(t.target_close_date) : '' },

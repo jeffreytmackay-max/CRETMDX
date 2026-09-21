@@ -100,6 +100,9 @@ create table if not exists public.transactions (
   coi_status        text,
   deposit_status    text,
   legal_rep         text,
+  budgeted          boolean,
+  approvals         jsonb,
+  process           jsonb,
   custom            jsonb not null default '{}'::jsonb,
   note_log          jsonb not null default '[]'::jsonb,
   created_at        timestamptz default now()
