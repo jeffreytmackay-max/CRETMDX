@@ -8,6 +8,7 @@ import type { Property, Lease, Transaction, FieldDef } from './types';
 import { usd, num, fmtDate } from './format';
 import { fmtStamp } from '../components/ActivityLog';
 import { parseLinks, linkHref, linkLabel } from './links';
+import { dealValue } from './deal';
 
 // Palette (hex without '#', for reuse by pptxgenjs which wants bare hex).
 export const DECK = {
@@ -91,10 +92,11 @@ export function slideModelFor(
   if (t.priority) chips.push({ text: `${t.priority} priority`, tone: priorityTone(t.priority) });
   if (t.progress) chips.push({ text: t.progress, tone: 'neutral' });
 
+  const dv = dealValue(t);
   const stats: SlideStat[] = [
     { value: t.target_sqft ? num(t.target_sqft) : '—', label: 'Target SF' },
+    { value: dv > 0 ? usd(dv) : '—', label: 'Total Deal Value' },
     { value: t.estimated_value ? usd(t.estimated_value) : '—', label: 'Est. Annual Cost' },
-    { value: t.probability != null ? `${t.probability}%` : '—', label: 'Confidence' },
     {
       value: fmtDate(t.date_needed_by || t.target_close_date),
       label: t.date_needed_by ? 'Date Needed By' : 'Target Close',
@@ -104,12 +106,15 @@ export function slideModelFor(
   const rawFields: SlideField[] = [
     { label: 'Type', value: t.type || '' },
     { label: 'Space Type', value: t.space_type || '' },
+    { label: 'Lease Term', value: t.term_years ? `${t.term_years} yr${t.term_years === 1 ? '' : 's'}` : '' },
     { label: 'Region / Business Unit', value: t.market || '' },
     { label: 'Property', value: property },
     { label: 'Linked Lease', value: lease },
     { label: 'Assigned To', value: t.assigned_to || '' },
     { label: 'External Broker', value: t.broker || '' },
     { label: 'Internal Lead', value: t.lead || '' },
+    { label: 'Legal Representative', value: t.legal_rep || '' },
+    { label: 'Confidence', value: t.probability ? `${t.probability}%` : '' },
     { label: 'Start Date', value: t.start_date ? fmtDate(t.start_date) : '' },
     { label: 'Target Close', value: t.target_close_date ? fmtDate(t.target_close_date) : '' },
   ];

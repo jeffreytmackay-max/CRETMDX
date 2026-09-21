@@ -84,6 +84,7 @@ create table if not exists public.transactions (
   market            text,
   target_sqft       integer default 0,
   estimated_value   numeric default 0,
+  term_years        numeric,
   probability       integer default 50,
   broker            text,
   lead              text,
@@ -98,6 +99,7 @@ create table if not exists public.transactions (
   assigned_to       text,
   coi_status        text,
   deposit_status    text,
+  legal_rep         text,
   custom            jsonb not null default '{}'::jsonb,
   note_log          jsonb not null default '[]'::jsonb,
   created_at        timestamptz default now()

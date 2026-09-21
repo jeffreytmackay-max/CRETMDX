@@ -110,7 +110,8 @@ export interface Transaction {
   stage: string;
   market: string;
   target_sqft: number;
-  estimated_value: number;
+  estimated_value: number; // estimated annual cost
+  term_years?: number; // lease term in years (× annual cost = total deal value)
   probability: number;
   broker: string;
   lead: string;
@@ -126,6 +127,7 @@ export interface Transaction {
   assigned_to?: string;
   coi_status?: string; // Certificate of Insurance status
   deposit_status?: string; // Security deposit workflow status
+  legal_rep?: string; // legal representative / counsel on the deal
   custom?: Record<string, unknown>; // user-defined custom fields
   note_log?: NoteEntry[]; // timestamped activity-log entries
 }

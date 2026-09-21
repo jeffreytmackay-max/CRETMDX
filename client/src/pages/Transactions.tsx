@@ -3,11 +3,14 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Property, Lease, Transaction, NoteEntry } from '../lib/types';
 import ActivityLog, { fmtStamp } from '../components/ActivityLog';
-import { usdCompact, num, fmtDate } from '../lib/format';
+import { usd, usdCompact, num, fmtDate } from '../lib/format';
 import { downloadWorkbook, type Sheet } from '../lib/excel';
 import { exportSlidesPdf } from '../lib/slidePdf';
 import { exportSlidesPptx } from '../lib/slidePptx';
 import { parseLinks, serializeLinks, linkHref, type TxLink } from '../lib/links';
+import { dealValue } from '../lib/deal';
+import PersonSelect from '../components/PersonSelect';
+import { getDirectory, addToDirectory, mergeOptions } from '../lib/directory';
 import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
 import CustomFields from '../components/CustomFields';
 import ColumnPicker from '../components/ColumnPicker';
@@ -104,6 +107,7 @@ const TX_SORTS: SortOption<Transaction>[] = [
   { key: 'assigned_to', label: 'Assigned To', get: (t) => t.assigned_to || '' },
   { key: 'date_needed_by', label: 'Date Needed', get: (t) => t.date_needed_by || '' },
   { key: 'estimated_value', label: 'Annual Cost', get: (t) => t.estimated_value || 0 },
+  { key: 'deal_value', label: 'Total Deal Value', get: (t) => dealValue(t) },
 ];
 const TX_GROUPS: GroupOption<Transaction>[] = [
   { key: 'none', label: 'None', get: () => '' },
@@ -133,13 +137,15 @@ const FIELD_SYNONYMS: Record<string, string> = {
   targetsf: 'target_sqft', sf: 'target_sqft', squarefeet: 'target_sqft', targetsqft: 'target_sqft',
   estimatedvalue: 'estimated_value', estvalue: 'estimated_value', annualcost: 'estimated_value',
   estannualcost: 'estimated_value', value: 'estimated_value',
+  term: 'term_years', termyears: 'term_years', leaseterm: 'term_years', termlength: 'term_years',
+  legalrepresentative: 'legal_rep', legalrep: 'legal_rep', legalcounsel: 'legal_rep', counsel: 'legal_rep',
   probability: 'probability', confidence: 'probability',
   broker: 'broker', externalbroker: 'broker',
   lead: 'lead', internallead: 'lead', internalleadrequestor: 'lead',
   notes: 'notes', comments: 'notes', comment: 'notes',
   startdate: 'start_date', targetclose: 'target_close_date', targetclosedate: 'target_close_date',
 };
-const NUM_FIELDS = ['target_sqft', 'estimated_value', 'probability'];
+const NUM_FIELDS = ['target_sqft', 'estimated_value', 'term_years', 'probability'];
 const DATE_FIELDS = ['date_needed_by', 'start_date', 'target_close_date'];
 
 function normHeader(h: string): string {
@@ -213,8 +219,10 @@ function buildTxnReportSheets(
     headers: [
       'Name', 'Type', 'Stage', 'Status', 'Priority', 'Space Type', 'Region / Business Unit',
       'Assigned To', 'External Broker', 'Internal Lead', 'Property', 'Linked Lease',
-      'Target SF', 'Est. Annual Cost', 'Confidence %', 'Date Needed By', 'Start Date',
+      'Target SF', 'Est. Annual Cost', 'Lease Term (yrs)', 'Total Deal Value',
+      'Confidence %', 'Date Needed By', 'Start Date',
       'Target Close', 'COI Status', 'Security Deposit',
+      'Legal Representative',
       ...customDefs.map((d) => d.label),
       'Notes', 'Comments', 'Last Comment', 'Comment Log',
     ],
@@ -226,9 +234,11 @@ function buildTxnReportSheets(
         t.market || '', t.assigned_to || '', t.broker || '', t.lead || '',
         t.property_id != null ? propName.get(t.property_id) || '' : '',
         t.lease_id != null ? leaseName.get(t.lease_id) || '' : '',
-        t.target_sqft || 0, Math.round(t.estimated_value || 0), t.probability || 0,
+        t.target_sqft || 0, Math.round(t.estimated_value || 0), t.term_years || '',
+        Math.round(dealValue(t)) || '', t.probability || 0,
         t.date_needed_by || '', t.start_date || '', t.target_close_date || '',
         t.coi_status || '', t.deposit_status || '',
+        t.legal_rep || '',
         ...customDefs.map((d) => fmtCustomValue(t.custom?.[d.field_key])),
         t.notes || '', log.length, last ? fmtStamp(last.ts) : '', commentsText(t),
       ];
@@ -299,6 +309,26 @@ export default function Transactions() {
     ];
     return [...base, ...customSelectFilters<Transaction>(txnDefs)];
   }, [txnDefs, distinctAssigned]);
+
+  // Directory-backed dropdown options for the people/firm fields. Merged from
+  // values already used across transactions plus names added inline (persisted).
+  const [directories, setDirectories] = useState<Record<string, string[]>>(() => ({
+    assigned_to: getDirectory('assigned_to'),
+    lead: getDirectory('lead'),
+    broker: getDirectory('broker'),
+    legal_rep: getDirectory('legal_rep'),
+  }));
+  const addDir = (role: string, name: string) =>
+    setDirectories((d) => ({ ...d, [role]: addToDirectory(role, name) }));
+  const roleOptions = useMemo(
+    () => ({
+      assigned_to: mergeOptions(txns.map((t) => t.assigned_to), directories.assigned_to),
+      lead: mergeOptions(txns.map((t) => t.lead), directories.lead),
+      broker: mergeOptions(txns.map((t) => t.broker), directories.broker),
+      legal_rep: mergeOptions(txns.map((t) => t.legal_rep), directories.legal_rep),
+    }),
+    [txns, directories],
+  );
 
   // Grouping/sorting: built-ins + related (Property, Lease) + custom selects.
   const txGroups = useMemo<GroupOption<Transaction>[]>(() => {
@@ -425,11 +455,27 @@ export default function Transactions() {
           <span className="tabular-nums">{t.estimated_value ? usdCompact(t.estimated_value) : '—'}</span>
         ),
       },
+      {
+        key: 'deal_value',
+        label: 'Total Deal Value',
+        group: 'This tab',
+        align: 'right',
+        render: (t) => {
+          const dv = dealValue(t);
+          return (
+            <span className="tabular-nums font-medium text-slate-800">
+              {dv ? usdCompact(dv) : '—'}
+            </span>
+          );
+        },
+      },
       // Available but hidden by default:
+      { key: 'term_years', label: 'Term (yrs)', group: 'This tab', defaultVisible: false, align: 'right', render: (t) => (t.term_years ? String(t.term_years) : '—') },
       { key: 'space_type', label: 'Space Type', group: 'This tab', defaultVisible: false, render: (t) => t.space_type || '—' },
       { key: 'market', label: 'Market', group: 'This tab', defaultVisible: false, render: (t) => t.market || '—' },
       { key: 'coi_status', label: 'COI Status', group: 'This tab', defaultVisible: false, render: (t) => t.coi_status || '—' },
       { key: 'deposit_status', label: 'Deposit Status', group: 'This tab', defaultVisible: false, render: (t) => t.deposit_status || '—' },
+      { key: 'legal_rep', label: 'Legal Rep', group: 'This tab', defaultVisible: false, render: (t) => t.legal_rep || '—' },
       { key: 'target_close_date', label: 'Target Close', group: 'This tab', defaultVisible: false, render: (t) => fmtDate(t.target_close_date) },
     ];
     return [
@@ -494,8 +540,9 @@ export default function Transactions() {
   const totals = useMemo(() => {
     const open = txns.filter((t) => t.stage !== 'Completed');
     const annualCost = open.reduce((s, t) => s + (t.estimated_value || 0), 0);
+    const dealTotal = open.reduce((s, t) => s + dealValue(t), 0);
     const sf = open.reduce((s, t) => s + (t.target_sqft || 0), 0);
-    return { annualCost, sf, count: open.length };
+    return { annualCost, dealTotal, sf, count: open.length };
   }, [txns]);
 
   async function moveTo(id: number, stage: string) {
@@ -541,6 +588,7 @@ export default function Transactions() {
           <h1 className="text-2xl font-bold text-slate-900">Real Estate Transactions</h1>
           <p className="text-sm text-slate-500">
             {totals.count} active · {num(totals.sf)} sf in motion ·{' '}
+            {usdCompact(totals.dealTotal)} total deal value ·{' '}
             {usdCompact(totals.annualCost)} est. annual cost
           </p>
         </div>
@@ -750,7 +798,7 @@ export default function Transactions() {
       <div className="flex flex-1 gap-4 overflow-x-auto scroll-touch p-4 md:p-6">
         {STAGES.map((stage) => {
           const items = byStage[stage] || [];
-          const stageValue = items.reduce((s, t) => s + t.estimated_value, 0);
+          const stageValue = items.reduce((s, t) => s + dealValue(t), 0);
           return (
             <div
               key={stage}
@@ -817,11 +865,18 @@ export default function Transactions() {
                           {t.progress}
                         </span>
                       )}
-                      {t.estimated_value > 0 && (
-                        <span className="ml-auto text-sm font-semibold text-slate-700">
-                          {usdCompact(t.estimated_value)}
+                      {dealValue(t) > 0 ? (
+                        <span
+                          className="ml-auto text-sm font-semibold text-slate-700"
+                          title="Total deal value (term × annual cost)"
+                        >
+                          {usdCompact(dealValue(t))}
                         </span>
-                      )}
+                      ) : t.estimated_value > 0 ? (
+                        <span className="ml-auto text-sm font-semibold text-slate-700" title="Estimated annual cost">
+                          {usdCompact(t.estimated_value)}/yr
+                        </span>
+                      ) : null}
                     </div>
                     <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
                       <span>{t.assigned_to || (t.target_sqft ? `${num(t.target_sqft)} sf` : '')}</span>
@@ -850,6 +905,8 @@ export default function Transactions() {
           initial={editing}
           properties={properties}
           leases={leases}
+          options={roleOptions}
+          onAddOption={addDir}
           onSave={save}
           onClose={() => setEditing(null)}
         />
@@ -994,12 +1051,16 @@ function TxForm({
   initial,
   properties,
   leases,
+  options,
+  onAddOption,
   onSave,
   onClose,
 }: {
   initial: Partial<Transaction>;
   properties: Property[];
   leases: Lease[];
+  options: Record<string, string[]>;
+  onAddOption: (role: string, name: string) => void;
   onSave: (t: Partial<Transaction>, files?: File[]) => void;
   onClose: () => void;
 }) {
@@ -1083,7 +1144,12 @@ function TxForm({
             />
           </Field>
           <Field label="Assigned To">
-            <Input value={form.assigned_to || ''} onChange={(e) => set('assigned_to', e.target.value)} />
+            <PersonSelect
+              value={form.assigned_to}
+              options={options.assigned_to}
+              onChange={(v) => set('assigned_to', v)}
+              onAdd={(n) => onAddOption('assigned_to', n)}
+            />
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -1169,11 +1235,50 @@ function TxForm({
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
+          <Field label="Lease Term (yrs)">
+            <Input
+              type="number"
+              step="0.5"
+              value={form.term_years ?? ''}
+              onChange={(e) =>
+                set('term_years', e.target.value ? parseFloat(e.target.value) : undefined)
+              }
+              placeholder="e.g. 10"
+            />
+          </Field>
+          <Field label="Total Deal Value">
+            <div className="flex h-full items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+              <span className="font-semibold text-slate-800 tabular-nums">
+                {dealValue(form as Transaction) > 0 ? usd(dealValue(form as Transaction)) : '—'}
+              </span>
+              <span className="ml-2 text-xs text-slate-400">= term × annual cost</span>
+            </div>
+          </Field>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
           <Field label="External Broker">
-            <Input value={form.broker || ''} onChange={(e) => set('broker', e.target.value)} />
+            <PersonSelect
+              value={form.broker}
+              options={options.broker}
+              onChange={(v) => set('broker', v)}
+              onAdd={(n) => onAddOption('broker', n)}
+            />
           </Field>
           <Field label="Internal Lead / Requestor">
-            <Input value={form.lead || ''} onChange={(e) => set('lead', e.target.value)} />
+            <PersonSelect
+              value={form.lead}
+              options={options.lead}
+              onChange={(v) => set('lead', v)}
+              onAdd={(n) => onAddOption('lead', n)}
+            />
+          </Field>
+          <Field label="Legal Representative">
+            <PersonSelect
+              value={form.legal_rep}
+              options={options.legal_rep}
+              onChange={(v) => set('legal_rep', v)}
+              onAdd={(n) => onAddOption('legal_rep', n)}
+            />
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
