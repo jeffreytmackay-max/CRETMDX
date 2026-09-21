@@ -1,8 +1,9 @@
-// Small, self-populating option lists for the "people & firms" dropdown fields
-// on transactions (Assigned To, Internal Lead, External Broker, Legal Rep).
-// Options come from two sources, merged: values already present on existing
-// records (auto-harvested) plus any names the user adds inline (persisted here).
-// Kept in localStorage so the lists survive reloads without a backend table.
+// User-managed option lists for the "people & firms" dropdown fields on
+// transactions (Assigned To, Internal Lead, External Broker, Legal Rep). The
+// lists start empty and contain only names the user adds inline via
+// "＋ Add new…"; they are NOT harvested from existing records, so the dropdowns
+// stay clean until curated. Kept in localStorage so they survive reloads
+// without a backend table.
 
 const key = (role: string) => `cretmdx:dir:${role}`;
 

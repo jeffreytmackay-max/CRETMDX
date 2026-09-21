@@ -310,8 +310,10 @@ export default function Transactions() {
     return [...base, ...customSelectFilters<Transaction>(txnDefs)];
   }, [txnDefs, distinctAssigned]);
 
-  // Directory-backed dropdown options for the people/firm fields. Merged from
-  // values already used across transactions plus names added inline (persisted).
+  // Directory-backed dropdown options for the people/firm fields. The lists are
+  // fully user-managed and start empty — options come only from names added
+  // inline via "＋ Add new…" (persisted per role), not harvested from records,
+  // so the dropdowns stay clean until the user curates them.
   const [directories, setDirectories] = useState<Record<string, string[]>>(() => ({
     assigned_to: getDirectory('assigned_to'),
     lead: getDirectory('lead'),
@@ -322,12 +324,12 @@ export default function Transactions() {
     setDirectories((d) => ({ ...d, [role]: addToDirectory(role, name) }));
   const roleOptions = useMemo(
     () => ({
-      assigned_to: mergeOptions(txns.map((t) => t.assigned_to), directories.assigned_to),
-      lead: mergeOptions(txns.map((t) => t.lead), directories.lead),
-      broker: mergeOptions(txns.map((t) => t.broker), directories.broker),
-      legal_rep: mergeOptions(txns.map((t) => t.legal_rep), directories.legal_rep),
+      assigned_to: mergeOptions(directories.assigned_to),
+      lead: mergeOptions(directories.lead),
+      broker: mergeOptions(directories.broker),
+      legal_rep: mergeOptions(directories.legal_rep),
     }),
-    [txns, directories],
+    [directories],
   );
 
   // Grouping/sorting: built-ins + related (Property, Lease) + custom selects.
