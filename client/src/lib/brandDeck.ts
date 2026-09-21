@@ -100,7 +100,7 @@ export function slideModelFor(
     { value: t.estimated_value ? usd(t.estimated_value) : '—', label: 'Est. Annual Cost' },
     {
       value: fmtDate(t.date_needed_by || t.target_close_date),
-      label: t.date_needed_by ? 'Date Needed By' : 'Target Close',
+      label: t.date_needed_by ? 'Lease Expiration' : 'Target Close',
     },
   ];
 

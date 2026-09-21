@@ -103,7 +103,7 @@ const TX_SORTS: SortOption<Transaction>[] = [
   { key: 'progress', label: 'Status', get: (t) => t.progress || '' },
   { key: 'space_type', label: 'Space Type', get: (t) => t.space_type || '' },
   { key: 'assigned_to', label: 'Assigned To', get: (t) => t.assigned_to || '' },
-  { key: 'date_needed_by', label: 'Date Needed', get: (t) => t.date_needed_by || '' },
+  { key: 'date_needed_by', label: 'Lease Expiration', get: (t) => t.date_needed_by || '' },
   { key: 'estimated_value', label: 'Annual Cost', get: (t) => t.estimated_value || 0 },
   { key: 'deal_value', label: 'Total Deal Value', get: (t) => dealValue(t) },
 ];
@@ -129,6 +129,8 @@ const FIELD_SYNONYMS: Record<string, string> = {
   spacetype: 'space_type',
   assignedto: 'assigned_to', owner: 'assigned_to', assignee: 'assigned_to',
   dateneededby: 'date_needed_by', needby: 'date_needed_by', neededby: 'date_needed_by',
+  leaseexpiration: 'date_needed_by', leaseexpirationdate: 'date_needed_by', leaseexp: 'date_needed_by',
+  expirationdate: 'date_needed_by', expiration: 'date_needed_by',
   coistatus: 'coi_status', coi: 'coi_status',
   securitydeposit: 'deposit_status', deposit: 'deposit_status', depositstatus: 'deposit_status',
   market: 'market', region: 'market', regionbusinessunit: 'market', businessunit: 'market',
@@ -218,7 +220,7 @@ function buildTxnReportSheets(
       'Name', 'Type', 'Stage', 'Status', 'Priority', 'Space Type', 'Region / Business Unit',
       'Assigned To', 'External Broker', 'Internal Lead', 'Property', 'Linked Lease',
       'Target SF', 'Est. Annual Cost', 'Lease Term (yrs)', 'Total Deal Value',
-      'Confidence %', 'Date Needed By', 'Start Date',
+      'Confidence %', 'Lease Expiration Date', 'Start Date',
       'Target Close', 'COI Status', 'Security Deposit',
       'Legal Representative', 'DOA Band', 'Required Approvers', 'Approval Status', 'Process %',
       ...customDefs.map((d) => d.label),
@@ -446,7 +448,7 @@ export default function Transactions() {
       },
       { key: 'progress', label: 'Status', group: 'This tab', render: (t) => t.progress || '—' },
       { key: 'assigned_to', label: 'Assigned To', group: 'This tab', render: (t) => t.assigned_to || '—' },
-      { key: 'date_needed_by', label: 'Need By', group: 'This tab', render: (t) => fmtDate(t.date_needed_by) },
+      { key: 'date_needed_by', label: 'Lease Expiration', group: 'This tab', render: (t) => fmtDate(t.date_needed_by) },
       {
         key: 'estimated_value',
         label: 'Annual Cost',
@@ -928,7 +930,7 @@ export default function Transactions() {
                       <span>{t.assigned_to || (t.target_sqft ? `${num(t.target_sqft)} sf` : '')}</span>
                       <span>
                         {t.date_needed_by
-                          ? `Need by ${fmtDate(t.date_needed_by)}`
+                          ? `Lease exp ${fmtDate(t.date_needed_by)}`
                           : fmtDate(t.target_close_date)}
                       </span>
                     </div>
@@ -1036,7 +1038,7 @@ function CsvImport({
         <p className="text-sm text-slate-600">
           Upload a CSV (e.g. exported from your tracker). The first row must be column headers.
           Recognized columns include Name/Description, Type, Stage, Status, Priority, Space Type,
-          Assigned To, Date Needed By, COI Status, Security Deposit, Market, Target SF, and Notes.
+          Assigned To, Lease Expiration Date, Market, Target SF, and Notes.
         </p>
         <input
           type="file"
@@ -1190,7 +1192,7 @@ function TxForm({
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Date Needed By">
+          <Field label="Lease Expiration Date">
             <Input
               type="date"
               value={form.date_needed_by || ''}
@@ -1203,23 +1205,6 @@ function TxForm({
               options={options.assigned_to}
               onChange={(v) => set('assigned_to', v)}
               onAdd={(n) => onAddOption('assigned_to', n)}
-            />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="COI Status">
-            <Select value={form.coi_status || ''} onChange={(e) => set('coi_status', e.target.value)}>
-              <option value="">—</option>
-              {COI_STATUSES.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Security Deposit">
-            <Input
-              value={form.deposit_status || ''}
-              onChange={(e) => set('deposit_status', e.target.value)}
-              placeholder="e.g. Deposit Sent to LL"
             />
           </Field>
         </div>
