@@ -8,6 +8,8 @@ import Leases from './pages/Leases';
 import Insurance from './pages/Insurance';
 import Transactions from './pages/Transactions';
 import Process from './pages/Process';
+import IntakeRequest from './pages/IntakeRequest';
+import PublicIntake from './pages/PublicIntake';
 import Financial from './pages/Financial';
 import Compare from './pages/Compare';
 import Reports from './pages/Reports';
@@ -26,6 +28,7 @@ const NAV = [
   { to: '/insurance', label: 'Insurance (COI)', icon: '🛡' },
   { to: '/compare', label: 'Compare Leases', icon: '⊞' },
   { to: '/transactions', label: 'Transactions', icon: '⇄' },
+  { to: '/request', label: 'New Request', icon: '✚' },
   { to: '/process', label: 'Transaction Process', icon: '❏' },
   { to: '/financial', label: 'Financial Modeling', icon: '∑' },
   { to: '/reports', label: 'Reports', icon: '🗎' },
@@ -60,6 +63,16 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 export default function App() {
   const [navOpen, setNavOpen] = useState(false);
 
+  // Track the hash route so the public intake page can render outside the auth
+  // gate. Declared with the other hooks so hook order stays stable.
+  const [hash, setHash] = useState(() => (typeof window !== 'undefined' ? window.location.hash : ''));
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+  const isPublicIntake = hash.replace(/^#\/?/, '').toLowerCase().startsWith('submit');
+
   // Auth gate: when the cloud backend is configured, require a signed-in session
   // before showing the app. In local-only mode (no backend), render immediately.
   const enabled = backendEnabled();
@@ -69,6 +82,9 @@ export default function App() {
     getSession().then(setSession);
     return onAuthChange(setSession);
   }, [enabled]);
+
+  // Public request form: available to anyone with the link, no sign-in required.
+  if (isPublicIntake) return <PublicIntake />;
 
   if (enabled && session === undefined) {
     return (
@@ -149,6 +165,7 @@ export default function App() {
           <Route path="/leases" element={<Leases />} />
           <Route path="/insurance" element={<Insurance />} />
           <Route path="/transactions" element={<Transactions />} />
+          <Route path="/request" element={<IntakeRequest />} />
           <Route path="/process" element={<Process />} />
           <Route path="/financial" element={<Financial />} />
           <Route path="/compare" element={<Compare />} />

@@ -11,6 +11,7 @@ import { parseLinks, serializeLinks, linkHref, type TxLink } from '../lib/links'
 import { dealValue } from '../lib/deal';
 import PersonSelect from '../components/PersonSelect';
 import { getDirectory, addToDirectory, mergeOptions } from '../lib/directory';
+import { TYPES, SPACE_TYPES, PRIORITIES } from '../lib/txnOptions';
 import {
   STAGES,
   STAGE_ACCENT,
@@ -71,20 +72,8 @@ function setLocalLinks(id: number, val: string): void {
 }
 
 // Workflow stages, stage accents, and the process/approval model live in
-// lib/process (the single source of truth mirroring the team's flowchart).
-const TYPES = [
-  'New Lease',
-  'Renewal',
-  'Expansion',
-  'Relocation',
-  'Consolidation',
-  'Disposition',
-  'Sublease',
-  'Acquisition',
-  'Build-to-Suit',
-];
-const SPACE_TYPES = ['NOP', 'Office', 'Lab', 'Aviation', 'Multi-Use', 'Other'];
-const PRIORITIES = ['High', 'Medium', 'Low'];
+// lib/process; the field vocabulary (types, space types, priorities) lives in
+// lib/txnOptions so the intake form shares it.
 const PROGRESS = ['Planning', 'In Progress', 'Complete'];
 const COI_STATUSES = ['Not Started', 'Sent to Landlord', 'Received', 'N/A'];
 
