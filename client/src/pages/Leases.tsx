@@ -280,24 +280,46 @@ export default function Leases() {
     // The property the lease was previously on (if reassigned) also needs a resync.
     const prevPropertyId = form.id ? editing?.property_id : undefined;
     let id = form.id;
-    if (id) await api.updateLease(id, form);
-    else id = (await api.createLease(form)).id;
-    if (file && id) await savePdf(id, file);
-    await applyLeaseToProperty(form);
-    // Vacated property (on reassignment) still gets the fill-when-empty resync.
-    await syncPropertiesSqft([prevPropertyId]);
+    // The lease record is the critical write — surface any failure clearly.
+    try {
+      if (id) await api.updateLease(id, form);
+      else id = (await api.createLease(form)).id;
+    } catch (e) {
+      alert('Could not save this lease: ' + (e instanceof Error ? e.message : String(e)));
+      return;
+    }
+    // Ancillary steps must never block or discard a successful save.
+    try {
+      if (file && id) await savePdf(id, file);
+      await applyLeaseToProperty(form);
+      await syncPropertiesSqft([prevPropertyId]); // vacated property resync
+    } catch (e) {
+      console.warn('Lease saved, but a follow-up step failed:', e);
+    }
     setEditing(null);
     setEditingFile(null);
     load();
   }
   async function saveBatch(items: { lease: Partial<Lease>; file: File }[]) {
+    const failures: string[] = [];
     for (const { lease, file } of items) {
-      const created = await api.createLease(lease);
-      if (created?.id) await savePdf(created.id, file);
-      await applyLeaseToProperty(lease);
+      try {
+        const created = await api.createLease(lease);
+        if (created?.id) {
+          try {
+            await savePdf(created.id, file);
+            await applyLeaseToProperty(lease);
+          } catch (e) {
+            console.warn('Lease saved, but a follow-up step failed:', e);
+          }
+        }
+      } catch (e) {
+        failures.push(`${lease.lease_name || 'Lease'}: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
     setBatch(null);
     load();
+    if (failures.length) alert('Some leases could not be saved:\n' + failures.join('\n'));
   }
   async function remove(id: number) {
     if (!confirm('Delete this lease?')) return;
