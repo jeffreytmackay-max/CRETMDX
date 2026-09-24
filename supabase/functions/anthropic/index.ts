@@ -6,47 +6,53 @@
 // `.../anthropic/v1/messages`, which this function forwards to Anthropic with the
 // real key injected.
 //
-// Deploy with JWT verification OFF (we verify the user ourselves so CORS
-// preflight works): see this folder's README.
-
-import { createClient } from 'jsr:@supabase/supabase-js@2';
+// Deploy with JWT verification OFF (we verify the user ourselves so the CORS
+// preflight can reach this code): see this folder's README.
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 
-const cors: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type, anthropic-version, anthropic-beta, x-api-key, anthropic-dangerous-direct-browser-access',
-};
+// Reflect whatever headers the browser asks for (the Anthropic SDK adds several
+// x-stainless-* headers), so the preflight always passes. A fixed allow-list
+// would drop those and the browser would report "Connection error."
+function corsHeaders(req: Request): Record<string, string> {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers':
+      req.headers.get('Access-Control-Request-Headers') ||
+      'authorization, x-client-info, apikey, content-type, anthropic-version, anthropic-beta, x-api-key',
+    'Access-Control-Max-Age': '86400',
+  };
+}
 
-function json(body: unknown, status: number): Response {
+function json(req: Request, body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...cors, 'content-type': 'application/json' },
+    headers: { ...corsHeaders(req), 'content-type': 'application/json' },
   });
 }
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
-  if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders(req) });
+  if (req.method !== 'POST') return json(req, { error: 'Method not allowed' }, 405);
 
-  // Require a valid, signed-in Supabase user.
+  // Require a valid, signed-in Supabase user (verified via the Auth REST API so
+  // this function has no external dependencies to boot).
   const token = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
-  if (!token) return json({ error: 'Sign-in required.' }, 401);
+  if (!token) return json(req, { error: 'Sign-in required.' }, 401);
   try {
-    const supa = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-    );
-    const { data, error } = await supa.auth.getUser(token);
-    if (error || !data.user) return json({ error: 'Sign-in required.' }, 401);
+    const url = Deno.env.get('SUPABASE_URL') ?? '';
+    const anon = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    const u = await fetch(`${url}/auth/v1/user`, {
+      headers: { Authorization: `Bearer ${token}`, apikey: anon },
+    });
+    if (!u.ok) return json(req, { error: 'Sign-in required.' }, 401);
   } catch {
-    return json({ error: 'Could not verify sign-in.' }, 401);
+    return json(req, { error: 'Could not verify sign-in.' }, 401);
   }
 
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!apiKey) return json({ error: 'Server is missing ANTHROPIC_API_KEY.' }, 500);
+  if (!apiKey) return json(req, { error: 'Server is missing ANTHROPIC_API_KEY.' }, 500);
 
   // Forward the request body verbatim to Anthropic with the server-side key.
   const body = await req.text();
@@ -63,9 +69,9 @@ Deno.serve(async (req) => {
     const text = await upstream.text();
     return new Response(text, {
       status: upstream.status,
-      headers: { ...cors, 'content-type': upstream.headers.get('content-type') || 'application/json' },
+      headers: { ...corsHeaders(req), 'content-type': upstream.headers.get('content-type') || 'application/json' },
     });
   } catch (e) {
-    return json({ error: 'Upstream request failed: ' + (e instanceof Error ? e.message : String(e)) }, 502);
+    return json(req, { error: 'Upstream request failed: ' + (e instanceof Error ? e.message : String(e)) }, 502);
   }
 });
