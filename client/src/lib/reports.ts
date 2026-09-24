@@ -5,6 +5,37 @@ import { regionForCountry, REGIONS } from './geo';
 // Pure report builders + CSV export helpers. All computed client-side from the
 // browser store so reports work offline and on the static site.
 
+// Rank a lease for "how current is it": active leases win, then the most
+// recently commenced, then the latest expiration. Used to pick the lease that
+// supersedes older ones on the same property.
+function currency(l: Lease): [number, string, string] {
+  return [l.status === 'Active' ? 1 : 0, l.commencement_date || '', l.expiration_date || ''];
+}
+function moreCurrent(a: Lease, b: Lease): boolean {
+  const ra = currency(a);
+  const rb = currency(b);
+  if (ra[0] !== rb[0]) return ra[0] > rb[0];
+  if (ra[1] !== rb[1]) return ra[1] > rb[1];
+  return ra[2] > rb[2];
+}
+
+// Reduce to one representative lease per property — its current (active /
+// most-recent) lease — so reporting reflects the superseding lease rather than
+// every historical one. Leases with no property are kept as-is.
+export function currentLeases(leases: Lease[]): Lease[] {
+  const byProperty = new Map<number, Lease>();
+  const orphans: Lease[] = [];
+  for (const l of leases) {
+    if (l.property_id == null) {
+      orphans.push(l);
+      continue;
+    }
+    const held = byProperty.get(l.property_id);
+    if (!held || moreCurrent(l, held)) byProperty.set(l.property_id, l);
+  }
+  return [...byProperty.values(), ...orphans];
+}
+
 export interface RentRollRow {
   lease: string;
   property: string;

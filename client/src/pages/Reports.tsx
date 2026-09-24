@@ -17,9 +17,11 @@ import {
   futureObligations,
   criticalDates,
   pipelineByStage,
+  currentLeases,
   toCsv,
   downloadCsv,
 } from '../lib/reports';
+import { usePersisted } from '../lib/uiState';
 import { Button, Card, Input, Select, SectionTitle, Spinner, StatCard } from '../components/ui';
 import { Monogram } from '../components/Logo';
 import ColumnPicker from '../components/ColumnPicker';
@@ -157,6 +159,15 @@ export default function Reports() {
     return transactions.filter((t) => t.property_id != null && ids.has(t.property_id));
   }, [transactions, filteredProperties, propFilterActive]);
 
+  // Property-centric by default: reduce to each property's current (active /
+  // superseding) lease so a newer lease replaces the one it supersedes. Users
+  // can switch to "All leases" to see full history.
+  const [leaseView, setLeaseView] = usePersisted<'current' | 'all'>('cretmdx:reports:leaseView', 'current');
+  const reportLeases = useMemo(
+    () => (leaseView === 'current' ? currentLeases(filteredLeases) : filteredLeases),
+    [leaseView, filteredLeases],
+  );
+
   function resetFilters() {
     setFType('All');
     setFOwnership('All');
@@ -171,23 +182,23 @@ export default function Reports() {
 
   const data = useMemo(
     () => ({
-      exp: expirationSchedule(filteredLeases),
-      expRegion: expirationByRegion(filteredProperties, filteredLeases),
-      obl: futureObligations(filteredLeases, 10),
-      crit: criticalDates(filteredProperties, filteredLeases, 24),
+      exp: expirationSchedule(reportLeases),
+      expRegion: expirationByRegion(filteredProperties, reportLeases),
+      obl: futureObligations(reportLeases, 10),
+      crit: criticalDates(filteredProperties, reportLeases, 24),
       pipe: pipelineByStage(filteredTransactions),
     }),
-    [filteredProperties, filteredLeases, filteredTransactions],
+    [filteredProperties, reportLeases, filteredTransactions],
   );
 
   // ---- Dynamic Rent Roll columns (lease fields + cross-tab Property fields + custom) ----
   const propsById = useMemo(() => new Map(properties.map((p) => [p.id, p])), [properties]);
   const rollLeases = useMemo(
     () =>
-      [...filteredLeases].sort((a, b) =>
+      [...reportLeases].sort((a, b) =>
         (a.expiration_date || '').localeCompare(b.expiration_date || ''),
       ),
-    [filteredLeases],
+    [reportLeases],
   );
 
   const rollColumns = useMemo<ColumnDef<Lease>[]>(() => {
@@ -290,7 +301,7 @@ export default function Reports() {
         ),
       );
     } else if (report === 'gantt') {
-      const rows = [...filteredLeases]
+      const rows = [...reportLeases]
         .filter((l) => l.expiration_date)
         .sort((a, b) => (a.expiration_date || '').localeCompare(b.expiration_date || ''));
       downloadCsv(
@@ -322,7 +333,7 @@ export default function Reports() {
         'insurance-coi.csv',
         toCsv(
           ['Lease', 'Landlord', 'Property', 'State', 'Carrier', 'Additional Insured', 'Certificate Holder', 'COI Status', 'Policy Effective', 'Policy Expiration', 'CGL Each Occurrence', 'CGL Aggregate', 'Auto Liability', 'Umbrella', "Employer's Liability", 'Workers Comp', 'Waiver of Subrogation', 'Primary & Non-Contributory', 'Broker', 'Broker Contact', 'Requirements', 'Notes'],
-          filteredLeases.map((l) => {
+          reportLeases.map((l) => {
             const i = l.insurance || {};
             return [
               l.lease_name, l.counterparty || '', l.property_name || '', l.property_state || '',
@@ -407,10 +418,29 @@ export default function Reports() {
             </Button>
           )}
         </div>
-        <div className="mt-2 text-xs text-slate-500">
-          Showing <strong>{filteredProperties.length}</strong> of {properties.length} properties ·{' '}
-          <strong>{filteredLeases.length}</strong> of {leases.length} leases
-          {filtersActive && <span className="text-blue-600"> · filters applied</span>}
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-slate-500">
+          <span>
+            Showing <strong>{filteredProperties.length}</strong> of {properties.length} properties ·{' '}
+            <strong>{reportLeases.length}</strong>{' '}
+            {leaseView === 'current' ? 'current leases' : `of ${leases.length} leases`}
+            {filtersActive && <span className="text-blue-600"> · filters applied</span>}
+          </span>
+          <span className="ml-auto flex items-center gap-1">
+            <span className="uppercase tracking-wide text-slate-400">Leases</span>
+            <div className="flex rounded-full bg-slate-100 p-0.5">
+              {(['current', 'all'] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setLeaseView(v)}
+                  className={`rounded-full px-2.5 py-1 font-medium transition ${
+                    leaseView === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                  }`}
+                >
+                  {v === 'current' ? 'Current per property' : 'All leases'}
+                </button>
+              ))}
+            </div>
+          </span>
         </div>
       </div>
 
@@ -442,7 +472,7 @@ export default function Reports() {
       </div>
 
       {report === 'summary' && (
-        <SummaryReport properties={filteredProperties} leases={filteredLeases} data={data} />
+        <SummaryReport properties={filteredProperties} leases={reportLeases} data={data} />
       )}
       {report === 'rentroll' && (
         <>
@@ -460,13 +490,13 @@ export default function Reports() {
       {report === 'expirations' && (
         <ExpirationsReport rows={data.exp} groups={data.expRegion} />
       )}
-      {report === 'gantt' && <LeaseGanttReport leases={filteredLeases} />}
+      {report === 'gantt' && <LeaseGanttReport leases={reportLeases} />}
       {report === 'obligations' && <ObligationsReport rows={data.obl} />}
       {report === 'critical' && <CriticalReport rows={data.crit} />}
-      {report === 'insurance' && <InsuranceReport leases={filteredLeases} />}
+      {report === 'insurance' && <InsuranceReport leases={reportLeases} />}
       {report === 'pipeline' && <PipelineReport rows={data.pipe} />}
       {report === 'export' && (
-        <ExcelExportReport properties={filteredProperties} leases={filteredLeases} />
+        <ExcelExportReport properties={filteredProperties} leases={reportLeases} />
       )}
 
       {/* Print footer (visible on paper) */}
