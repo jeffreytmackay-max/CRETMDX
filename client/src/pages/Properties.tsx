@@ -585,6 +585,7 @@ function PropertyLeases({
 }
 
 function PropertyStaticMap({ property }: { property: Property }) {
+  const [failed, setFailed] = useState(false);
   const lat = Number(property.lat);
   const lng = Number(property.lng);
   const ok =
@@ -597,14 +598,28 @@ function PropertyStaticMap({ property }: { property: Property }) {
       <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
         Location
       </div>
-      <img
-        src={url}
-        alt={`Map of ${property.name}`}
-        width={440}
-        height={200}
-        loading="lazy"
-        className="max-w-full rounded-lg border border-slate-200"
-      />
+      {failed ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          Couldn't load the map thumbnail. Enable the <strong>Maps Static API</strong> for this key
+          in Google Cloud — it's a separate API from the Maps JavaScript API the map uses, and must
+          also be allowed under the key's API restrictions.{' '}
+          <a href={url} target="_blank" rel="noreferrer" className="font-medium underline">
+            Open the image
+          </a>{' '}
+          to see Google's exact error.
+        </div>
+      ) : (
+        <img
+          src={url}
+          alt={`Map of ${property.name}`}
+          width={440}
+          height={200}
+          loading="lazy"
+          referrerPolicy="strict-origin-when-cross-origin"
+          onError={() => setFailed(true)}
+          className="max-w-full rounded-lg border border-slate-200"
+        />
+      )}
     </div>
   );
 }
