@@ -146,12 +146,27 @@ export default function Properties() {
     return m;
   }, [leases]);
 
-  // Soonest lease expiration per property (earliest expiration among its leases).
+  // Soonest lease expiration per property (earliest expiration among its leases) —
+  // used only as a last-resort fallback for properties with no active lease.
   const nextExpByProperty = useMemo(() => {
     const m = new Map<number, string>();
     for (const [pid, ls] of leasesByProperty) {
       const dates = ls.map((l) => l.expiration_date).filter(Boolean).sort();
       if (dates.length) m.set(pid, dates[0]);
+    }
+    return m;
+  }, [leasesByProperty]);
+
+  // Expiration of the property's ACTIVE lease (latest among active leases). This
+  // is what the property's Lease Expiration should reflect.
+  const activeExpByProperty = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const [pid, ls] of leasesByProperty) {
+      const dates = ls
+        .filter((l) => l.status === 'Active' && l.expiration_date)
+        .map((l) => l.expiration_date)
+        .sort();
+      if (dates.length) m.set(pid, dates[dates.length - 1]);
     }
     return m;
   }, [leasesByProperty]);
@@ -253,7 +268,10 @@ export default function Properties() {
         label: 'Lease Exp.',
         group: 'From Leases',
         render: (p) => {
-          const exp = p.lease_expiration || nextExpByProperty.get(p.id);
+          // Prefer the active lease's expiration; fall back to a stored value,
+          // then to the soonest expiration across all leases.
+          const exp =
+            activeExpByProperty.get(p.id) || p.lease_expiration || nextExpByProperty.get(p.id);
           return exp ? fmtDate(exp) : '—';
         },
       },
@@ -745,8 +763,8 @@ function PropertyForm({
             onChange={(e) => set('lease_expiration', e.target.value)}
           />
           <span className="mt-1 block text-xs text-slate-400">
-            Auto-set to the connected lease's expiration when you add/extend a lease on this
-            property; you can also override it here.
+            Tracks the property's active lease — set automatically to the active lease's expiration
+            whenever leases on this property change.
           </span>
         </Field>
         <div className="grid grid-cols-3 gap-3">

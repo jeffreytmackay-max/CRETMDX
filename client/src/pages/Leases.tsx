@@ -265,15 +265,38 @@ export default function Leases() {
   }
 
   // Connecting a lease/extension to a property overwrites that property's square
-  // footage and lease-expiration with the lease's values (only when the lease
-  // actually provides them, so a blank field never wipes existing data).
+  // footage with the lease's value (only when provided, so a blank never wipes
+  // existing data). Lease expiration is handled separately by
+  // syncPropertyExpiration so it always tracks the property's ACTIVE lease.
   async function applyLeaseToProperty(lease: Partial<Lease>) {
     const pid = lease.property_id;
     if (pid == null || !Number.isFinite(pid)) return;
-    const patch: Partial<Property> = {};
-    if (lease.rentable_sqft) patch.rentable_sqft = lease.rentable_sqft;
-    if (lease.expiration_date) patch.lease_expiration = lease.expiration_date;
-    if (Object.keys(patch).length) await api.updateProperty(pid as number, patch);
+    if (lease.rentable_sqft) await api.updateProperty(pid as number, { rentable_sqft: lease.rentable_sqft });
+  }
+
+  // Set each property's Lease Expiration to its ACTIVE lease's expiration (the
+  // latest among active leases). Only writes when an active lease with a date
+  // exists and the stored value differs; it does not clear an existing value
+  // when a property has no active lease.
+  async function syncPropertyExpiration(ids: (number | null | undefined)[]) {
+    const unique = [
+      ...new Set(ids.filter((x): x is number => typeof x === 'number' && Number.isFinite(x))),
+    ];
+    if (unique.length === 0) return;
+    const [allLeases, allProps] = await Promise.all([api.leases(), api.properties()]);
+    const propById = new Map(allProps.map((p) => [p.id, p]));
+    for (const pid of unique) {
+      const prop = propById.get(pid);
+      if (!prop) continue;
+      const active = allLeases
+        .filter((l) => l.property_id === pid && l.status === 'Active' && l.expiration_date)
+        .map((l) => l.expiration_date)
+        .sort();
+      const exp = active.length ? active[active.length - 1] : '';
+      if (exp && exp !== prop.lease_expiration) {
+        await api.updateProperty(pid, { lease_expiration: exp });
+      }
+    }
   }
 
   async function save(form: Partial<Lease>, file?: File | null) {
@@ -293,6 +316,7 @@ export default function Leases() {
       if (file && id) await savePdf(id, file);
       await applyLeaseToProperty(form);
       await syncPropertiesSqft([prevPropertyId]); // vacated property resync
+      await syncPropertyExpiration([form.property_id, prevPropertyId]);
     } catch (e) {
       console.warn('Lease saved, but a follow-up step failed:', e);
     }
@@ -309,6 +333,7 @@ export default function Leases() {
           try {
             await savePdf(created.id, file);
             await applyLeaseToProperty(lease);
+            await syncPropertyExpiration([lease.property_id]);
           } catch (e) {
             console.warn('Lease saved, but a follow-up step failed:', e);
           }
@@ -327,6 +352,7 @@ export default function Leases() {
     await api.deleteLease(id);
     await deletePdf(id);
     await syncPropertiesSqft([pid]);
+    await syncPropertyExpiration([pid]);
     load();
   }
 
