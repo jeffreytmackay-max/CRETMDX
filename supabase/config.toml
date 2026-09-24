@@ -1,0 +1,6 @@
+# Supabase project config. Only the pieces this repo needs are set here.
+
+# The Anthropic proxy verifies the signed-in user itself (so CORS preflight and
+# our own 401s work); disable the gateway's JWT check for it.
+[functions.anthropic]
+verify_jwt = false

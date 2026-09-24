@@ -154,11 +154,19 @@ export default function Settings() {
 
         <Card className="p-5">
           <SectionTitle>Anthropic API Key</SectionTitle>
-          <p className="mb-4 text-sm text-slate-600">
-            Used to read uploaded lease PDFs with Claude and translate foreign-language documents.
-            Your key is stored <strong>only in this browser</strong> (local storage) and is sent
-            directly to Anthropic — it never touches any other server.
-          </p>
+          {isSupabaseConfigured() ? (
+            <div className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+              AI runs through a secure server-side proxy for signed-in users — the key is stored on
+              the server, not in your browser, so there's <strong>nothing to enter here</strong>.
+              (This field is only a fallback for local/offline use.)
+            </div>
+          ) : (
+            <p className="mb-4 text-sm text-slate-600">
+              Used to read uploaded lease PDFs with Claude and translate foreign-language documents.
+              Your key is stored <strong>only in this browser</strong> (local storage) and is sent
+              directly to Anthropic.
+            </p>
+          )}
           <Field label="API Key">
             <Input
               type="password"

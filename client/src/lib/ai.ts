@@ -1,9 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { Lease, LeaseInsurance } from './types';
+import { getSupabase, getSupabaseConfig, isSupabaseConfigured } from './supabase';
 
-// Browser-only (BYOK) integration with Claude for abstracting lease PDFs and
-// translating foreign-language documents. The user's API key is stored only in
-// their own browser's localStorage and used to call the Anthropic API directly.
+// Claude integration for abstracting lease PDFs and translating foreign-language
+// documents. Preferred path: a Supabase Edge Function proxy that holds the
+// Anthropic key server-side (never shipped to the browser) and only serves
+// signed-in users. Fallback: a local bring-your-own-key in localStorage calling
+// Anthropic directly, for local/offline use.
 
 const KEY_STORAGE = 'cretmdx:anthropic_key';
 const MODEL = 'claude-opus-4-8';
@@ -24,7 +27,36 @@ export function setApiKey(key: string): void {
   }
 }
 export function hasApiKey(): boolean {
-  return getApiKey().length > 0;
+  // AI is reachable through the server proxy whenever the cloud backend is
+  // configured (the app only renders past the login gate when signed in), or
+  // via a local BYOK key.
+  return isSupabaseConfigured() || getApiKey().length > 0;
+}
+
+// Build an Anthropic client. Preferred: route through the Supabase Edge Function
+// proxy (key stays server-side, calls limited to signed-in users). Fallback: a
+// local BYOK key calling Anthropic directly.
+async function anthropicClient(): Promise<Anthropic> {
+  const sb = getSupabase();
+  if (sb) {
+    const { data } = await sb.auth.getSession();
+    const token = data.session?.access_token;
+    if (token) {
+      const cfg = getSupabaseConfig();
+      const base = cfg.url.replace(/\/+$/, '');
+      return new Anthropic({
+        baseURL: `${base}/functions/v1/anthropic`,
+        apiKey: 'proxy', // ignored by the proxy; the real key lives server-side
+        dangerouslyAllowBrowser: true,
+        defaultHeaders: { Authorization: `Bearer ${token}`, apikey: cfg.anonKey },
+      });
+    }
+  }
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    throw new Error('AI is unavailable — sign in, or add an Anthropic API key in Settings.');
+  }
+  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
 }
 
 export interface LeaseAbstract {
@@ -128,8 +160,6 @@ function extractJson(text: string): LeaseAbstract {
 }
 
 export async function abstractLeasePdf(file: File): Promise<LeaseAbstract> {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('No Anthropic API key set. Add one in Settings.');
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
     throw new Error('Please upload a PDF file.');
   }
@@ -138,7 +168,7 @@ export async function abstractLeasePdf(file: File): Promise<LeaseAbstract> {
   }
 
   const data = await fileToBase64(file);
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const client = await anthropicClient();
 
   const resp = await client.messages.create({
     model: MODEL,
@@ -234,10 +264,8 @@ function insuranceFromResponse(text: string): LeaseInsurance {
 
 // Read a lease PDF (or image) and return just its insurance requirements.
 export async function extractInsuranceFromPdf(file: Blob): Promise<LeaseInsurance> {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('No Anthropic API key set. Add one in Settings.');
   const data = await fileToBase64(file as File);
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const client = await anthropicClient();
   const resp = await client.messages.create({
     model: MODEL,
     max_tokens: 2000,
@@ -258,9 +286,7 @@ export async function extractInsuranceFromPdf(file: Blob): Promise<LeaseInsuranc
 // Fallback for devices without the PDF: extract insurance requirements from the
 // lease's synced abstract text / notes. Only as complete as that text.
 export async function extractInsuranceFromText(text: string): Promise<LeaseInsurance> {
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error('No Anthropic API key set. Add one in Settings.');
-  const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const client = await anthropicClient();
   const resp = await client.messages.create({
     model: MODEL,
     max_tokens: 2000,
