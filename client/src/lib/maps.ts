@@ -8,11 +8,22 @@ import type { Property } from './types';
 const KEY = 'cretmdx:gmaps_key';
 const envKey = (import.meta.env.VITE_GOOGLE_MAPS_KEY as string | undefined)?.trim() || '';
 
+// True when a Maps key is baked into the build (VITE_GOOGLE_MAPS_KEY). When set,
+// it is the source of truth for every browser, so there is nothing to enter in
+// Settings and the key never "disappears".
+export function hasEnvMapsKey(): boolean {
+  return envKey.length > 10;
+}
+
 export function getMapsKey(): string {
+  // Prefer the build-baked key so a centrally managed key applies everywhere and
+  // is not shadowed by a stale per-browser value; fall back to a Settings entry
+  // for local/offline use.
+  if (envKey) return envKey;
   try {
-    return localStorage.getItem(KEY)?.trim() || envKey;
+    return localStorage.getItem(KEY)?.trim() || '';
   } catch {
-    return envKey;
+    return '';
   }
 }
 

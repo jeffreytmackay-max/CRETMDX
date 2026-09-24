@@ -6,7 +6,7 @@ import { Button, Card, Field, Input, Select, SectionTitle } from '../components/
 import type { FieldDef, FieldEntity, FieldType } from '../lib/types';
 import { getFieldDefs, addFieldDef, removeFieldDef, slugify } from '../lib/fields';
 import { api } from '../lib/api';
-import { getMapsKey, setMapsKey, loadGoogleMaps } from '../lib/maps';
+import { getMapsKey, setMapsKey, loadGoogleMaps, hasEnvMapsKey } from '../lib/maps';
 import {
   getSupabaseConfig,
   setSupabaseConfig,
@@ -359,11 +359,18 @@ function GoogleMapsCard() {
   return (
     <Card className="p-5">
       <SectionTitle>Google Maps</SectionTitle>
-      <p className="mb-4 text-sm text-slate-600">
-        Add a Google Maps API key to enable address autocomplete (auto-fills city/state/zip/country
-        and coordinates), the Google basemap with satellite &amp; Street View, and location
-        thumbnails. The key is stored <strong>only in this browser</strong>.
-      </p>
+      {hasEnvMapsKey() ? (
+        <div className="mb-4 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
+          A Maps key is set at build time and applies to everyone — there's{' '}
+          <strong>nothing to enter here</strong>. (This field is only a fallback for local/offline use.)
+        </div>
+      ) : (
+        <p className="mb-4 text-sm text-slate-600">
+          Add a Google Maps API key to enable address autocomplete (auto-fills city/state/zip/country
+          and coordinates), the Google basemap with satellite &amp; Street View, and location
+          thumbnails. The key is stored <strong>only in this browser</strong>.
+        </p>
+      )}
       <Field label="Maps API key">
         <Input
           type="password"
