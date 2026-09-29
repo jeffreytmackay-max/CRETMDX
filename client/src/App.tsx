@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Properties from './pages/Properties';
 import MapView from './pages/MapView';
 import Leases from './pages/Leases';
+import RentRoll from './pages/RentRoll';
 import Insurance from './pages/Insurance';
 import Transactions from './pages/Transactions';
 import Process from './pages/Process';
@@ -25,6 +26,7 @@ const NAV = [
   { to: '/map', label: 'Map', icon: '◎' },
   { to: '/properties', label: 'Properties', icon: '⌂' },
   { to: '/leases', label: 'Lease Administration', icon: '▤' },
+  { to: '/rent-roll', label: 'Rent Roll', icon: '≣' },
   { to: '/insurance', label: 'Insurance (COI)', icon: '🛡' },
   { to: '/compare', label: 'Compare Leases', icon: '⊞' },
   { to: '/transactions', label: 'Transactions', icon: '⇄' },
@@ -163,6 +165,7 @@ export default function App() {
           <Route path="/map" element={<MapView />} />
           <Route path="/properties" element={<Properties />} />
           <Route path="/leases" element={<Leases />} />
+          <Route path="/rent-roll" element={<RentRoll />} />
           <Route path="/insurance" element={<Insurance />} />
           <Route path="/transactions" element={<Transactions />} />
           <Route path="/request" element={<IntakeRequest />} />
