@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Property, Lease, FieldDef } from '../lib/types';
 import { currentLeases } from '../lib/reports';
+import { leaseCommitment } from '../lib/finance';
 import { regionForCountry } from '../lib/geo';
 import { usd, num, pct, fmtDate, monthsUntil } from '../lib/format';
 import { downloadWorkbook, type Sheet } from '../lib/excel';
@@ -27,6 +28,8 @@ interface RentRollRow {
   annual: number;
   rentPsf: number;
   opexPsf: number;
+  commitTotal: number;
+  commitRemaining: number;
 }
 
 function termLeft(exp?: string): string {
@@ -87,6 +90,7 @@ export default function RentRoll() {
       if (!lease && !includeVacant) continue;
       const sqft = lease?.rentable_sqft || p.rentable_sqft || 0;
       const annual = lease?.base_rent_annual || 0;
+      const commit = lease ? leaseCommitment(lease) : { total: 0, remaining: 0 };
       out.push({
         property: p,
         lease,
@@ -95,6 +99,8 @@ export default function RentRoll() {
         annual,
         rentPsf: sqft ? annual / sqft : 0,
         opexPsf: lease?.opex_psf || 0,
+        commitTotal: commit.total,
+        commitRemaining: commit.remaining,
       });
     }
     return out;
@@ -139,6 +145,8 @@ export default function RentRoll() {
       { key: 'status', label: 'Status', group: 'Lease', render: (r) => (r.lease ? <Badge>{r.lease.status}</Badge> : <span className="text-slate-400">Vacant</span>), text: (r) => r.lease?.status || 'Vacant' },
       { key: 'sqft', label: 'Rentable SF', group: 'Lease', align: 'right', render: (r) => <span className="tabular-nums">{r.sqft ? num(r.sqft) : '—'}</span>, text: (r) => String(r.sqft || ''), sum: (r) => r.sqft, fmtSum: (n) => num(n) },
       { key: 'annual', label: 'Base Rent/yr', group: 'Lease', align: 'right', render: (r) => <span className="tabular-nums">{r.annual ? usd(r.annual) : '—'}</span>, text: (r) => String(Math.round(r.annual) || ''), sum: (r) => r.annual, fmtSum: (n) => usd(n) },
+      { key: 'commit_total', label: 'Total Commitment', group: 'Lease', align: 'right', render: (r) => <span className="tabular-nums">{r.commitTotal ? usd(r.commitTotal) : '—'}</span>, text: (r) => String(Math.round(r.commitTotal) || ''), sum: (r) => r.commitTotal, fmtSum: (n) => usd(n) },
+      { key: 'commit_remaining', label: 'Remaining Commitment', group: 'Lease', align: 'right', render: (r) => <span className="tabular-nums">{r.commitRemaining ? usd(r.commitRemaining) : '—'}</span>, text: (r) => String(Math.round(r.commitRemaining) || ''), sum: (r) => r.commitRemaining, fmtSum: (n) => usd(n) },
       { key: 'rentpsf', label: 'Rent/SF', group: 'Lease', align: 'right', render: (r) => <span className="tabular-nums">{r.rentPsf ? usd(r.rentPsf, 2) : '—'}</span>, text: (r) => (r.rentPsf ? r.rentPsf.toFixed(2) : '') },
       { key: 'opexpsf', label: 'OpEx/SF', group: 'Lease', align: 'right', render: (r) => <span className="tabular-nums">{r.opexPsf ? usd(r.opexPsf, 2) : '—'}</span>, text: (r) => (r.opexPsf ? String(r.opexPsf) : '') },
       { key: 'commence', label: 'Commence', group: 'Lease', render: (r) => fmtDate(r.lease?.commencement_date), text: (r) => r.lease?.commencement_date || '' },

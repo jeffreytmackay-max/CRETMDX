@@ -1,6 +1,8 @@
 // Financial modeling utilities for corporate real estate analysis.
 // Pure functions — ported from the backend so the app can run fully in-browser.
 
+import type { Lease } from './types';
+
 export function npv(rate: number, cashflows: number[]): number {
   return cashflows.reduce((acc, cf, t) => acc + cf / Math.pow(1 + rate, t), 0);
 }
@@ -178,4 +180,52 @@ function fmt(n: number): string {
     currency: 'USD',
     maximumFractionDigits: 0,
   }).format(n);
+}
+
+// Total and remaining base-rent commitment for a lease, escalation- and
+// free-rent-aware (consistent with the obligations report). "Total" is the full
+// contracted base rent over the term; "remaining" is the portion from today to
+// expiration (the current year is prorated by the months left in it).
+export function leaseCommitment(l: Lease): { total: number; remaining: number } {
+  const start = l.commencement_date ? new Date(l.commencement_date) : null;
+  const end = l.expiration_date ? new Date(l.expiration_date) : null;
+
+  // Fallback when dates are missing/invalid: annual rent × term in years.
+  if (!start || !end || Number.isNaN(+start) || Number.isNaN(+end) || end <= start) {
+    const years = (l.duration_months || 0) / 12;
+    const total = (l.base_rent_annual || 0) * years;
+    return { total, remaining: total };
+  }
+
+  const termYears = Math.max(1, Math.round((+end - +start) / (365.25 * 24 * 3600 * 1000)));
+  const rows = buildLeaseCashflows({
+    rentableSqft: l.rentable_sqft || 0,
+    baseRentAnnual: l.base_rent_annual || 0,
+    escalationPct: l.escalation_pct || 0,
+    opexPsf: 0,
+    freeRentMonths: effectiveFreeMonths(l.commencement_date, l.rent_start_date, l.free_rent_months || 0),
+    tiAllowancePsf: 0,
+    termYears,
+    discountRate: 0,
+  });
+
+  const now = Date.now();
+  let total = 0;
+  let remaining = 0;
+  for (const r of rows) {
+    const yearRent = Math.max(0, r.baseRent - r.freeRent);
+    total += yearRent;
+    const ys = new Date(start);
+    ys.setFullYear(start.getFullYear() + (r.year - 1));
+    const ye = new Date(start);
+    ye.setFullYear(start.getFullYear() + r.year);
+    if (+ye <= now) continue; // fully elapsed
+    if (+ys >= now) {
+      remaining += yearRent; // fully in the future
+    } else {
+      const frac = (+ye - now) / (+ye - +ys); // partial current year
+      remaining += yearRent * Math.max(0, Math.min(1, frac));
+    }
+  }
+  return { total, remaining };
 }
