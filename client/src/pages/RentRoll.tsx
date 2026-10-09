@@ -1,17 +1,23 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
-import type { Property, Lease } from '../lib/types';
+import type { Property, Lease, FieldDef } from '../lib/types';
 import { currentLeases } from '../lib/reports';
 import { regionForCountry } from '../lib/geo';
 import { usd, num, pct, fmtDate, monthsUntil } from '../lib/format';
 import { downloadWorkbook, type Sheet } from '../lib/excel';
 import { usePersisted } from '../lib/uiState';
-import { Button, Card, Input, Select, Spinner } from '../components/ui';
+import { Badge, Button, Card, Input, Select, Spinner } from '../components/ui';
 import { Monogram } from '../components/Logo';
+import ColumnPicker from '../components/ColumnPicker';
+import FilterBar, { applyFilters, type FilterDef } from '../components/FilterBar';
+import { useColumns, type ColumnDef } from '../lib/columns';
+import { customColumns } from '../lib/tableColumns';
+import { getFieldDefs } from '../lib/fields';
 
 // A dedicated, property-centric rent roll: one row per property joined to its
-// current (active/superseding) lease, with subtotals, grouping, filters, and
-// Excel/print export.
+// current (active/superseding) lease, with a column chooser, filter bar, group
+// subtotals, totals, and Excel/print export — matching the other tabs.
 
 interface RentRollRow {
   property: Property;
@@ -33,16 +39,28 @@ function termLeft(exp?: string): string {
   return r ? `${y}y ${r}m` : `${y}y`;
 }
 
+const selectFilters = <Row,>(defs: FieldDef[], get: (row: Row, key: string) => string): FilterDef<Row>[] =>
+  defs
+    .filter((d) => d.field_type === 'select')
+    .map((d) => ({
+      key: `cf:${d.entity}:${d.field_key}`,
+      label: d.label,
+      options: (d.options || '').split(',').map((o) => o.trim()).filter(Boolean),
+      get: (row: Row) => get(row, d.field_key),
+    }));
+
 export default function RentRoll() {
+  const navigate = useNavigate();
   const [properties, setProperties] = useState<Property[]>([]);
   const [leases, setLeases] = useState<Lease[]>([]);
   const [loading, setLoading] = useState(true);
+  const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
+  const [leaseDefs, setLeaseDefs] = useState<FieldDef[]>([]);
 
-  const [region, setRegion] = usePersisted('cretmdx:rr:region', 'All');
-  const [status, setStatus] = usePersisted('cretmdx:rr:status', 'All');
   const [group, setGroup] = usePersisted<'none' | 'region' | 'state'>('cretmdx:rr:group', 'none');
   const [includeVacant, setIncludeVacant] = usePersisted('cretmdx:rr:vacant', false);
   const [search, setSearch] = usePersisted('cretmdx:rr:search', '');
+  const [filters, setFilters] = usePersisted<Record<string, string>>('cretmdx:rr:filters', {});
 
   useEffect(() => {
     Promise.all([api.properties(), api.leases()]).then(([p, l]) => {
@@ -50,54 +68,110 @@ export default function RentRoll() {
       setLeases(l);
       setLoading(false);
     });
+    getFieldDefs('property').then(setPropDefs);
+    getFieldDefs('lease').then(setLeaseDefs);
   }, []);
 
-  // Each property's current lease.
+  // Each property's current (active/superseding) lease.
   const currentByProperty = useMemo(() => {
     const m = new Map<number, Lease>();
     for (const l of currentLeases(leases)) if (l.property_id != null) m.set(l.property_id, l);
     return m;
   }, [leases]);
 
-  const rows = useMemo<RentRollRow[]>(() => {
-    const q = search.trim().toLowerCase();
+  // One row per property joined to its current lease (before filters).
+  const baseRows = useMemo<RentRollRow[]>(() => {
     const out: RentRollRow[] = [];
     for (const p of properties) {
       const lease = currentByProperty.get(p.id);
       if (!lease && !includeVacant) continue;
-      const rg = regionForCountry(p.country);
-      if (region !== 'All' && rg !== region) continue;
-      if (status !== 'All' && (lease?.status || 'Vacant') !== status) continue;
-      if (q) {
-        const hay = [p.name, p.city, p.state, lease?.counterparty, lease?.lease_name]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
-        if (!hay.includes(q)) continue;
-      }
       const sqft = lease?.rentable_sqft || p.rentable_sqft || 0;
       const annual = lease?.base_rent_annual || 0;
       out.push({
         property: p,
         lease,
-        region: rg,
+        region: regionForCountry(p.country),
         sqft,
         annual,
         rentPsf: sqft ? annual / sqft : 0,
         opexPsf: lease?.opex_psf || 0,
       });
     }
-    return out.sort((a, b) => a.property.name.localeCompare(b.property.name));
-  }, [properties, currentByProperty, region, status, includeVacant, search]);
+    return out;
+  }, [properties, currentByProperty, includeVacant]);
 
-  const regionOptions = useMemo(
-    () => Array.from(new Set(properties.map((p) => regionForCountry(p.country)))).sort(),
-    [properties],
-  );
-  const statusOptions = useMemo(
-    () => Array.from(new Set(leases.map((l) => l.status).filter(Boolean))).sort() as string[],
-    [leases],
-  );
+  const distinct = (vals: (string | undefined)[]) =>
+    Array.from(new Set(vals.filter((v): v is string => !!v))).sort();
+
+  const filterDefs = useMemo<FilterDef<RentRollRow>[]>(() => {
+    const base: FilterDef<RentRollRow>[] = [
+      { key: 'region', label: 'Region', options: distinct(baseRows.map((r) => r.region)), get: (r) => r.region },
+      { key: 'status', label: 'Status', options: distinct(baseRows.map((r) => r.lease?.status || 'Vacant')), get: (r) => r.lease?.status || 'Vacant' },
+      { key: 'ptype', label: 'Property Type', options: distinct(baseRows.map((r) => r.property.property_type)), get: (r) => r.property.property_type },
+      { key: 'ownership', label: 'Ownership', options: distinct(baseRows.map((r) => r.property.ownership)), get: (r) => r.property.ownership },
+      { key: 'ltype', label: 'Lease Type', options: distinct(baseRows.map((r) => r.lease?.lease_type)), get: (r) => r.lease?.lease_type || '' },
+      { key: 'btype', label: 'Building Type', options: distinct(baseRows.map((r) => r.lease?.building_type)), get: (r) => r.lease?.building_type || '' },
+    ];
+    const propCustom = selectFilters<RentRollRow>(propDefs, (r, k) => String(r.property.custom?.[k] ?? '') || '');
+    const leaseCustom = selectFilters<RentRollRow>(leaseDefs, (r, k) => String(r.lease?.custom?.[k] ?? '') || '');
+    return [...base, ...propCustom, ...leaseCustom];
+  }, [baseRows, propDefs, leaseDefs]);
+
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let rs = applyFilters(baseRows, filterDefs, filters);
+    if (q) {
+      rs = rs.filter((r) =>
+        [r.property.name, r.property.city, r.property.state, r.lease?.counterparty, r.lease?.lease_name]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(q),
+      );
+    }
+    return [...rs].sort((a, b) => a.property.name.localeCompare(b.property.name));
+  }, [baseRows, filterDefs, filters, search]);
+
+  const allColumns = useMemo<ColumnDef<RentRollRow>[]>(() => {
+    const native: ColumnDef<RentRollRow>[] = [
+      { key: 'landlord', label: 'Landlord', group: 'Lease', render: (r) => r.lease?.counterparty || <span className="text-slate-400">Vacant</span>, text: (r) => r.lease?.counterparty || '' },
+      { key: 'ltype', label: 'Type', group: 'Lease', render: (r) => r.lease?.lease_type || '—', text: (r) => r.lease?.lease_type || '' },
+      { key: 'status', label: 'Status', group: 'Lease', render: (r) => (r.lease ? <Badge>{r.lease.status}</Badge> : <span className="text-slate-400">Vacant</span>), text: (r) => r.lease?.status || 'Vacant' },
+      { key: 'sqft', label: 'Rentable SF', group: 'Lease', align: 'right', render: (r) => <span className="tabular-nums">{r.sqft ? num(r.sqft) : '—'}</span>, text: (r) => String(r.sqft || ''), sum: (r) => r.sqft, fmtSum: (n) => num(n) },
+      { key: 'annual', label: 'Base Rent/yr', group: 'Lease', align: 'right', render: (r) => <span className="tabular-nums">{r.annual ? usd(r.annual) : '—'}</span>, text: (r) => String(Math.round(r.annual) || ''), sum: (r) => r.annual, fmtSum: (n) => usd(n) },
+      { key: 'rentpsf', label: 'Rent/SF', group: 'Lease', align: 'right', render: (r) => <span className="tabular-nums">{r.rentPsf ? usd(r.rentPsf, 2) : '—'}</span>, text: (r) => (r.rentPsf ? r.rentPsf.toFixed(2) : '') },
+      { key: 'opexpsf', label: 'OpEx/SF', group: 'Lease', align: 'right', render: (r) => <span className="tabular-nums">{r.opexPsf ? usd(r.opexPsf, 2) : '—'}</span>, text: (r) => (r.opexPsf ? String(r.opexPsf) : '') },
+      { key: 'commence', label: 'Commence', group: 'Lease', render: (r) => fmtDate(r.lease?.commencement_date), text: (r) => r.lease?.commencement_date || '' },
+      { key: 'expiration', label: 'Expiration', group: 'Lease', render: (r) => fmtDate(r.lease?.expiration_date), text: (r) => r.lease?.expiration_date || '' },
+      { key: 'termleft', label: 'Term Left', group: 'Lease', render: (r) => termLeft(r.lease?.expiration_date), text: (r) => termLeft(r.lease?.expiration_date) },
+      // Available but hidden by default:
+      { key: 'lease_name', label: 'Lease Name', group: 'Lease', defaultVisible: false, render: (r) => r.lease?.lease_name || '—', text: (r) => r.lease?.lease_name || '' },
+      { key: 'escalation', label: 'Escalation %', group: 'Lease', align: 'right', defaultVisible: false, render: (r) => (r.lease?.escalation_pct ? pct(r.lease.escalation_pct) : '—'), text: (r) => (r.lease?.escalation_pct ? String(r.lease.escalation_pct) : '') },
+      { key: 'renewal', label: 'Renewal Options', group: 'Lease', defaultVisible: false, render: (r) => r.lease?.renewal_options || '—', text: (r) => r.lease?.renewal_options || '' },
+      { key: 'building_type', label: 'Building Type', group: 'Lease', defaultVisible: false, render: (r) => r.lease?.building_type || '—', text: (r) => r.lease?.building_type || '' },
+      { key: 'currency', label: 'Currency', group: 'Lease', defaultVisible: false, render: (r) => r.lease?.currency || '—', text: (r) => r.lease?.currency || '' },
+      { key: 'security_deposit', label: 'Security Deposit', group: 'Lease', align: 'right', defaultVisible: false, render: (r) => (r.lease?.security_deposit ? usd(r.lease.security_deposit) : '—'), text: (r) => String(r.lease?.security_deposit || '') },
+      // Property fields:
+      { key: 'city', label: 'City', group: 'Property', defaultVisible: false, render: (r) => r.property.city || '—', text: (r) => r.property.city || '' },
+      { key: 'state', label: 'State', group: 'Property', defaultVisible: false, render: (r) => r.property.state || '—', text: (r) => r.property.state || '' },
+      { key: 'country', label: 'Country', group: 'Property', defaultVisible: false, render: (r) => r.property.country || '—', text: (r) => r.property.country || '' },
+      { key: 'region', label: 'Region', group: 'Property', defaultVisible: false, render: (r) => r.region || '—', text: (r) => r.region || '' },
+      { key: 'ptype', label: 'Property Type', group: 'Property', defaultVisible: false, render: (r) => r.property.property_type || '—', text: (r) => r.property.property_type || '' },
+      { key: 'ownership', label: 'Ownership', group: 'Property', defaultVisible: false, render: (r) => r.property.ownership || '—', text: (r) => r.property.ownership || '' },
+      { key: 'prop_status', label: 'Property Status', group: 'Property', defaultVisible: false, render: (r) => r.property.status || '—', text: (r) => r.property.status || '' },
+    ];
+    return [
+      ...native,
+      ...customColumns<RentRollRow>(propDefs, 'Property custom', (r) => r.property.custom),
+      ...customColumns<RentRollRow>(leaseDefs, 'Lease custom', (r) => r.lease?.custom),
+    ];
+  }, [propDefs, leaseDefs]);
+
+  const { keys: colKeys, setKeys: setColKeys, reset: resetCols, columns } = useColumns('rentroll', allColumns);
+  const colCount = columns.length + 1; // identity column + value columns
+
+  const sumCol = (c: ColumnDef<RentRollRow>, rs: RentRollRow[]) =>
+    c.sum ? (c.fmtSum ?? num)(rs.reduce((s, r) => s + c.sum!(r), 0)) : '';
 
   const totals = useMemo(() => {
     const sqft = rows.reduce((s, r) => s + r.sqft, 0);
@@ -105,7 +179,6 @@ export default function RentRoll() {
     return { count: rows.length, sqft, annual, rentPsf: sqft ? annual / sqft : 0 };
   }, [rows]);
 
-  // Grouped view.
   const groups = useMemo(() => {
     if (group === 'none') return [{ key: '', rows }];
     const key = (r: RentRollRow) => (group === 'region' ? r.region : r.property.state || '—');
@@ -120,29 +193,13 @@ export default function RentRoll() {
   function exportXls() {
     const sheet: Sheet = {
       name: 'Rent Roll',
-      headers: [
-        'Property', 'City', 'State', 'Region', 'Landlord', 'Lease', 'Type', 'Status',
-        'Rentable SF', 'Base Rent/yr', 'Rent/SF', 'OpEx/SF', 'Commencement', 'Expiration',
-        'Term Left', 'Escalation %', 'Renewal Options',
-      ],
-      rows: rows.map((r) => [
-        r.property.name, r.property.city, r.property.state, r.region,
-        r.lease?.counterparty || '', r.lease?.lease_name || '', r.lease?.lease_type || '',
-        r.lease?.status || 'Vacant', r.sqft, Math.round(r.annual), Number(r.rentPsf.toFixed(2)),
-        r.opexPsf, r.lease?.commencement_date || '', r.lease?.expiration_date || '',
-        termLeft(r.lease?.expiration_date), r.lease?.escalation_pct || 0, r.lease?.renewal_options || '',
-      ]),
+      headers: ['Property', ...columns.map((c) => c.label)],
+      rows: rows.map((r) => [r.property.name, ...columns.map((c) => (c.text ? c.text(r) : ''))]),
     };
     downloadWorkbook(`transmedics-rent-roll-${new Date().toISOString().slice(0, 10)}.xls`, [sheet]);
   }
 
   if (loading) return <Spinner />;
-
-  const colCount = 10;
-  const subtotal = (rs: RentRollRow[]) => ({
-    sqft: rs.reduce((s, r) => s + r.sqft, 0),
-    annual: rs.reduce((s, r) => s + r.annual, 0),
-  });
 
   return (
     <div className="p-4 md:p-8">
@@ -179,30 +236,9 @@ export default function RentRoll() {
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="no-print mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-slate-500">
-        <label className="flex items-center gap-1">
-          Region
-          <div className="w-36">
-            <Select value={region} onChange={(e) => setRegion(e.target.value)}>
-              <option>All</option>
-              {regionOptions.map((r) => (
-                <option key={r}>{r}</option>
-              ))}
-            </Select>
-          </div>
-        </label>
-        <label className="flex items-center gap-1">
-          Status
-          <div className="w-32">
-            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option>All</option>
-              {statusOptions.map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </Select>
-          </div>
-        </label>
+      {/* Controls: column chooser + grouping + options + search */}
+      <div className="no-print mb-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-slate-500">
+        <ColumnPicker all={allColumns} visible={colKeys} onChange={setColKeys} onReset={resetCols} />
         <label className="flex items-center gap-1">
           Group by
           <div className="w-28">
@@ -222,36 +258,66 @@ export default function RentRoll() {
         </div>
       </div>
 
+      {/* Filter bar — same as the other tabs */}
+      <div className="no-print mb-4">
+        <FilterBar defs={filterDefs} filters={filters} setFilters={setFilters} shown={rows.length} total={baseRows.length} />
+      </div>
+
       <Card className="overflow-x-auto scroll-touch">
         <table className="w-full min-w-[1000px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-3 py-3">Property</th>
-              <th className="px-3 py-3">Landlord</th>
-              <th className="px-3 py-3">Type</th>
-              <th className="px-3 py-3 text-right">Rentable SF</th>
-              <th className="px-3 py-3 text-right">Base Rent/yr</th>
-              <th className="px-3 py-3 text-right">Rent/SF</th>
-              <th className="px-3 py-3 text-right">OpEx/SF</th>
-              <th className="px-3 py-3">Commence</th>
-              <th className="px-3 py-3">Expiration</th>
-              <th className="px-3 py-3">Term Left</th>
+              {columns.map((c) => (
+                <th key={c.key} className={`px-3 py-3 ${c.align === 'right' ? 'text-right' : ''}`}>
+                  {c.label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {groups.map((g) => {
-              const st = subtotal(g.rows);
-              return (
-                <FragmentGroup
-                  key={g.key || 'all'}
-                  groupKey={group === 'none' ? '' : g.key}
-                  rows={g.rows}
-                  colCount={colCount}
-                  subtotalSqft={st.sqft}
-                  subtotalAnnual={st.annual}
-                />
-              );
-            })}
+            {groups.map((g) => (
+              <Fragment key={g.key || 'all'}>
+                {group !== 'none' && (
+                  <tr className="bg-slate-50/70">
+                    <td colSpan={colCount} className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {g.key} <span className="text-slate-400">· {g.rows.length}</span>
+                    </td>
+                  </tr>
+                )}
+                {g.rows.map((r) => (
+                  <tr key={r.property.id} className="border-b border-slate-100 hover:bg-slate-50">
+                    <td className="px-3 py-2.5">
+                      <button
+                        onClick={() => navigate(`/properties?expand=${r.property.id}`)}
+                        className="text-left font-medium text-slate-800 hover:text-blue-600 hover:underline"
+                      >
+                        {r.property.name}
+                      </button>
+                      <div className="text-xs text-slate-400">
+                        {[r.property.city, r.property.state].filter(Boolean).join(', ')}
+                        {r.region ? ` · ${r.region}` : ''}
+                      </div>
+                    </td>
+                    {columns.map((c) => (
+                      <td key={c.key} className={`px-3 py-2.5 text-slate-600 ${c.align === 'right' ? 'text-right' : ''}`}>
+                        {c.render(r)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                {group !== 'none' && (
+                  <tr className="border-b border-slate-200 bg-slate-50/40 text-xs font-medium text-slate-500">
+                    <td className="px-3 py-1.5">{g.key} subtotal</td>
+                    {columns.map((c) => (
+                      <td key={c.key} className={`px-3 py-1.5 tabular-nums ${c.align === 'right' ? 'text-right' : ''}`}>
+                        {sumCol(c, g.rows)}
+                      </td>
+                    ))}
+                  </tr>
+                )}
+              </Fragment>
+            ))}
             {rows.length === 0 && (
               <tr>
                 <td colSpan={colCount} className="px-3 py-8 text-center text-sm text-slate-400">
@@ -263,76 +329,17 @@ export default function RentRoll() {
           {rows.length > 0 && (
             <tfoot>
               <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold text-slate-800">
-                <td className="px-3 py-3" colSpan={3}>
-                  Total · {totals.count} sites
-                </td>
-                <td className="px-3 py-3 text-right tabular-nums">{num(totals.sqft)}</td>
-                <td className="px-3 py-3 text-right tabular-nums">{usd(totals.annual)}</td>
-                <td className="px-3 py-3 text-right tabular-nums">{usd(totals.rentPsf, 2)}</td>
-                <td colSpan={4} />
+                <td className="px-3 py-3">Total · {totals.count} sites</td>
+                {columns.map((c) => (
+                  <td key={c.key} className={`px-3 py-3 tabular-nums ${c.align === 'right' ? 'text-right' : ''}`}>
+                    {sumCol(c, rows)}
+                  </td>
+                ))}
               </tr>
             </tfoot>
           )}
         </table>
       </Card>
     </div>
-  );
-}
-
-function FragmentGroup({
-  groupKey,
-  rows,
-  colCount,
-  subtotalSqft,
-  subtotalAnnual,
-}: {
-  groupKey: string;
-  rows: RentRollRow[];
-  colCount: number;
-  subtotalSqft: number;
-  subtotalAnnual: number;
-}) {
-  return (
-    <>
-      {groupKey && (
-        <tr className="bg-slate-50/70">
-          <td colSpan={colCount} className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {groupKey} <span className="text-slate-400">· {rows.length}</span>
-          </td>
-        </tr>
-      )}
-      {rows.map((r) => (
-        <tr key={r.property.id} className="border-b border-slate-100 hover:bg-slate-50">
-          <td className="px-3 py-2.5">
-            <div className="font-medium text-slate-800">{r.property.name}</div>
-            <div className="text-xs text-slate-400">
-              {[r.property.city, r.property.state].filter(Boolean).join(', ')}
-              {r.region ? ` · ${r.region}` : ''}
-            </div>
-          </td>
-          <td className="px-3 py-2.5 text-slate-600">
-            {r.lease?.counterparty || <span className="text-slate-400">Vacant</span>}
-          </td>
-          <td className="px-3 py-2.5 text-slate-600">{r.lease?.lease_type || '—'}</td>
-          <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{r.sqft ? num(r.sqft) : '—'}</td>
-          <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{r.annual ? usd(r.annual) : '—'}</td>
-          <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{r.rentPsf ? usd(r.rentPsf, 2) : '—'}</td>
-          <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{r.opexPsf ? usd(r.opexPsf, 2) : '—'}</td>
-          <td className="px-3 py-2.5 text-slate-600">{fmtDate(r.lease?.commencement_date)}</td>
-          <td className="px-3 py-2.5 text-slate-600">{fmtDate(r.lease?.expiration_date)}</td>
-          <td className="px-3 py-2.5 text-slate-600">{termLeft(r.lease?.expiration_date)}</td>
-        </tr>
-      ))}
-      {groupKey && (
-        <tr className="border-b border-slate-200 bg-slate-50/40 text-xs font-medium text-slate-500">
-          <td className="px-3 py-1.5" colSpan={3}>
-            {groupKey} subtotal
-          </td>
-          <td className="px-3 py-1.5 text-right tabular-nums">{num(subtotalSqft)}</td>
-          <td className="px-3 py-1.5 text-right tabular-nums">{usd(subtotalAnnual)}</td>
-          <td colSpan={5} />
-        </tr>
-      )}
-    </>
   );
 }
