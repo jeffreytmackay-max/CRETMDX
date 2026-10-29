@@ -9,6 +9,7 @@ import { exportSlidesPdf } from '../lib/slidePdf';
 import { exportSlidesPptx } from '../lib/slidePptx';
 import { parseLinks, serializeLinks, linkHref, type TxLink } from '../lib/links';
 import { dealValue } from '../lib/deal';
+import { currentLeases } from '../lib/reports';
 import PersonSelect from '../components/PersonSelect';
 import { getDirectory, addToDirectory, mergeOptions } from '../lib/directory';
 import { TYPES, SPACE_TYPES, PRIORITIES } from '../lib/txnOptions';
@@ -1111,6 +1112,13 @@ function TxForm({
 }) {
   const [form, setForm] = useState<Partial<Transaction>>(initial);
   const set = (k: keyof Transaction, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+
+  // The expiration of a property's current (active/superseding) lease, used to
+  // auto-fill the transaction's Lease Expiration Date when a property is picked.
+  const propertyLeaseExp = (propertyId: number): string => {
+    const cur = currentLeases(leases.filter((l) => l.property_id === propertyId))[0];
+    return cur?.expiration_date || properties.find((p) => p.id === propertyId)?.lease_expiration || '';
+  };
   const [pending, setPending] = useState<File[]>([]);
   const [existing, setExisting] = useState<TxnAttachment[]>([]);
   const [links, setLinks] = useState<TxLink[]>(parseLinks(initial.links));
@@ -1201,7 +1209,14 @@ function TxForm({
           <Field label="Property (optional)">
             <Select
               value={form.property_id ?? ''}
-              onChange={(e) => set('property_id', e.target.value ? parseInt(e.target.value) : null)}
+              onChange={(e) => {
+                const id = e.target.value ? parseInt(e.target.value) : null;
+                set('property_id', id);
+                if (id != null) {
+                  const exp = propertyLeaseExp(id);
+                  if (exp) set('date_needed_by', exp); // Lease Expiration Date
+                }
+              }}
             >
               <option value="">— None —</option>
               {properties.map((p) => (
@@ -1219,7 +1234,14 @@ function TxForm({
           <Field label="Linked Lease">
             <Select
               value={form.lease_id ?? ''}
-              onChange={(e) => set('lease_id', e.target.value ? parseInt(e.target.value) : null)}
+              onChange={(e) => {
+                const id = e.target.value ? parseInt(e.target.value) : null;
+                set('lease_id', id);
+                if (id != null) {
+                  const lease = leases.find((l) => l.id === id);
+                  if (lease?.expiration_date) set('date_needed_by', lease.expiration_date);
+                }
+              }}
             >
               <option value="">— None —</option>
               {(form.property_id
