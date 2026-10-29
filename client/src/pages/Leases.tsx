@@ -70,7 +70,7 @@ export default function Leases() {
   const [sortKey, setSortKey] = usePersisted('cretmdx:lease:sortKey', 'expiration_date');
   const [sortDir, setSortDir] = usePersisted<SortDir>('cretmdx:lease:sortDir', 'asc');
   const [groupKey, setGroupKey] = usePersisted('cretmdx:lease:groupKey', 'none');
-  const [fieldFilters, setFieldFilters] = usePersisted<Record<string, string>>('cretmdx:lease:filters', {});
+  const [fieldFilters, setFieldFilters] = usePersisted<Record<string, string[]>>('cretmdx:lease:filters', {});
   const [leaseDefs, setLeaseDefs] = useState<FieldDef[]>([]);
   const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
   useEffect(() => {

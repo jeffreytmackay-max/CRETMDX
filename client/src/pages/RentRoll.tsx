@@ -63,7 +63,7 @@ export default function RentRoll() {
   const [group, setGroup] = usePersisted<'none' | 'region' | 'state'>('cretmdx:rr:group', 'none');
   const [includeVacant, setIncludeVacant] = usePersisted('cretmdx:rr:vacant', false);
   const [search, setSearch] = usePersisted('cretmdx:rr:search', '');
-  const [filters, setFilters] = usePersisted<Record<string, string>>('cretmdx:rr:filters', {});
+  const [filters, setFilters] = usePersisted<Record<string, string[]>>('cretmdx:rr:filters', {});
 
   useEffect(() => {
     Promise.all([api.properties(), api.leases()]).then(([p, l]) => {

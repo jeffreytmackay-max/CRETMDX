@@ -88,7 +88,7 @@ export default function Properties() {
   const [sortDir, setSortDir] = usePersisted<SortDir>('cretmdx:prop:sortDir', 'asc');
   const [groupKey, setGroupKey] = usePersisted('cretmdx:prop:groupKey', 'none');
   const [search, setSearch] = usePersisted('cretmdx:prop:search', '');
-  const [fieldFilters, setFieldFilters] = usePersisted<Record<string, string>>('cretmdx:prop:filters', {});
+  const [fieldFilters, setFieldFilters] = usePersisted<Record<string, string[]>>('cretmdx:prop:filters', {});
   const [propDefs, setPropDefs] = useState<FieldDef[]>([]);
   useEffect(() => {
     getFieldDefs('property').then(setPropDefs);

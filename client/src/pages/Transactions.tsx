@@ -29,7 +29,7 @@ import { Badge, Button, Card, Field, Input, Modal, Select, Spinner, Textarea } f
 import CustomFields from '../components/CustomFields';
 import ColumnPicker from '../components/ColumnPicker';
 import { SortGroupBar } from '../components/SortGroupBar';
-import FilterBar, { customSelectFilters, type FilterDef } from '../components/FilterBar';
+import FilterBar, { customSelectFilters, asArray, type FilterDef } from '../components/FilterBar';
 import { usePersisted } from '../lib/uiState';
 import { sortRows, groupRows, type SortDir, type SortOption, type GroupOption } from '../lib/table';
 import { useColumns, type ColumnDef } from '../lib/columns';
@@ -270,7 +270,7 @@ export default function Transactions() {
   const [groupKey, setGroupKey] = usePersisted('cretmdx:tx:groupKey', 'none');
   const [importing, setImporting] = useState(false);
   const [search, setSearch] = usePersisted('cretmdx:tx:search', '');
-  const [filters, setFilters] = usePersisted<Record<string, string>>('cretmdx:tx:filters', {});
+  const [filters, setFilters] = usePersisted<Record<string, string[]>>('cretmdx:tx:filters', {});
 
   // Field definitions (for custom select fields used in filters/groups/columns).
   const [txnDefs, setTxnDefs] = useState<FieldDef[]>([]);
@@ -389,8 +389,8 @@ export default function Transactions() {
     const q = search.trim().toLowerCase();
     return txns.filter((t) => {
       for (const fd of filterDefs) {
-        const sel = filters[fd.key];
-        if (sel && sel !== 'All' && String(fd.get(t) || '') !== sel) return false;
+        const selected = asArray(filters[fd.key]);
+        if (selected.length && !selected.includes(String(fd.get(t) || ''))) return false;
       }
       if (!q) return true;
       return [
