@@ -27,6 +27,7 @@ import { customColumns } from '../lib/tableColumns';
 import { getFieldDefs } from '../lib/fields';
 import type { FieldDef } from '../lib/types';
 import { COUNTRIES, statesFor, regionForCountry, REGIONS } from '../lib/geo';
+import { currentLeases } from '../lib/reports';
 
 const PROPERTY_TYPES = [
   'Headquarters',
@@ -139,9 +140,11 @@ export default function Properties() {
   // Annual rent per property = sum of its active leases' base rent.
   const rentByProperty = useMemo(() => {
     const m = new Map<number, number>();
-    for (const l of leases) {
-      if (l.status !== 'Active') continue;
-      m.set(l.property_id, (m.get(l.property_id) || 0) + (l.base_rent_annual || 0));
+    // Each property's rent from its CURRENT active lease only — never the sum of
+    // all its leases, so a superseded lease doesn't double-count the rent.
+    for (const l of currentLeases(leases)) {
+      if (l.status !== 'Active' || l.property_id == null) continue;
+      m.set(l.property_id, l.base_rent_annual || 0);
     }
     return m;
   }, [leases]);

@@ -1,6 +1,7 @@
 import type { Property, Lease, Transaction, DashboardData } from './types';
 import { SEED_PROPERTIES, SEED_LEASES, SEED_TRANSACTIONS } from './seed';
 import { regionForCountry } from './geo';
+import { currentLeases } from './reports';
 
 // Browser-only persistence layer. Replaces the REST backend with localStorage so
 // the app can be served as a static site (GitHub Pages) or opened as a single file.
@@ -156,7 +157,9 @@ export function dashboardFrom(
   transactions: Transaction[],
 ): DashboardData {
   const totalSqft = properties.reduce((s, p) => s + (p.rentable_sqft || 0), 0);
-  const annualRent = leases
+  // Rent from each property's CURRENT active lease only, so a superseded lease
+  // left marked Active never double-counts the same space's rent.
+  const annualRent = currentLeases(leases)
     .filter((l) => l.status === 'Active')
     .reduce((s, l) => s + (l.base_rent_annual || 0), 0);
 

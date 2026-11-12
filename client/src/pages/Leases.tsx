@@ -12,6 +12,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Lease, Property, ScheduleRow, Transaction } from '../lib/types';
 import { usd, usdCompact, num, fmtDate, monthsUntil } from '../lib/format';
+import { currentLeases } from '../lib/reports';
 import { abstractLeasePdf, abstractToLease, hasApiKey } from '../lib/ai';
 import { savePdf, deletePdf, listPdfIds, openPdf } from '../lib/pdfStore';
 import {
@@ -243,10 +244,10 @@ export default function Leases() {
   );
   const colCount = columns.length + 2; // identity (Lease) + actions
 
-  // Fill a property's Rentable SF from its leases ONLY when the property has no
-  // SqFt yet (blank/zero). This auto-populates empty portfolio records from lease
-  // data without ever overwriting a value entered manually. Runs after any lease
-  // add/edit/reassign/delete.
+  // Fill a property's Rentable SF from its CURRENT lease ONLY when the property
+  // has no SqFt yet (blank/zero). Uses the current (active/superseding) lease's
+  // area — never the sum of all its leases — so a superseded lease can't
+  // double-count the space. Never overwrites a value entered manually.
   async function syncPropertiesSqft(ids: (number | null | undefined)[]) {
     const unique = [
       ...new Set(ids.filter((x): x is number => typeof x === 'number' && Number.isFinite(x))),
@@ -257,10 +258,9 @@ export default function Leases() {
     for (const pid of unique) {
       const prop = propById.get(pid);
       if (!prop || (prop.rentable_sqft || 0) > 0) continue; // keep manually-set values
-      const total = allLeases
-        .filter((l) => l.property_id === pid)
-        .reduce((s, l) => s + (l.rentable_sqft || 0), 0);
-      if (total > 0) await api.updateProperty(pid, { rentable_sqft: total });
+      const cur = currentLeases(allLeases.filter((l) => l.property_id === pid))[0];
+      const sqft = cur?.rentable_sqft || 0;
+      if (sqft > 0) await api.updateProperty(pid, { rentable_sqft: sqft });
     }
   }
 
