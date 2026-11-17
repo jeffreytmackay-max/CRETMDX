@@ -21,7 +21,6 @@ import {
   toCsv,
   downloadCsv,
 } from '../lib/reports';
-import { usePersisted } from '../lib/uiState';
 import { Button, Card, Input, Select, SectionTitle, Spinner, StatCard } from '../components/ui';
 import { Monogram } from '../components/Logo';
 import ColumnPicker from '../components/ColumnPicker';
@@ -159,14 +158,10 @@ export default function Reports() {
     return transactions.filter((t) => t.property_id != null && ids.has(t.property_id));
   }, [transactions, filteredProperties, propFilterActive]);
 
-  // Property-centric by default: reduce to each property's current (active /
-  // superseding) lease so a newer lease replaces the one it supersedes. Users
-  // can switch to "All leases" to see full history.
-  const [leaseView, setLeaseView] = usePersisted<'current' | 'all'>('cretmdx:reports:leaseView', 'current');
-  const reportLeases = useMemo(
-    () => (leaseView === 'current' ? currentLeases(filteredLeases) : filteredLeases),
-    [leaseView, filteredLeases],
-  );
+  // Always property-centric: reduce to each property's current (active /
+  // superseding) lease so a newer lease replaces the one it supersedes and no
+  // property's rent or SF is ever counted twice.
+  const reportLeases = useMemo(() => currentLeases(filteredLeases), [filteredLeases]);
 
   function resetFilters() {
     setFType('All');
@@ -421,25 +416,8 @@ export default function Reports() {
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-slate-500">
           <span>
             Showing <strong>{filteredProperties.length}</strong> of {properties.length} properties ·{' '}
-            <strong>{reportLeases.length}</strong>{' '}
-            {leaseView === 'current' ? 'current leases' : `of ${leases.length} leases`}
+            <strong>{reportLeases.length}</strong> current leases (most recent per property)
             {filtersActive && <span className="text-blue-600"> · filters applied</span>}
-          </span>
-          <span className="ml-auto flex items-center gap-1">
-            <span className="uppercase tracking-wide text-slate-400">Leases</span>
-            <div className="flex rounded-full bg-slate-100 p-0.5">
-              {(['current', 'all'] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setLeaseView(v)}
-                  className={`rounded-full px-2.5 py-1 font-medium transition ${
-                    leaseView === v ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-                  }`}
-                >
-                  {v === 'current' ? 'Current per property' : 'All leases'}
-                </button>
-              ))}
-            </div>
           </span>
         </div>
       </div>

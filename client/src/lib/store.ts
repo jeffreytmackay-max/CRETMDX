@@ -159,14 +159,15 @@ export function dashboardFrom(
   const totalSqft = properties.reduce((s, p) => s + (p.rentable_sqft || 0), 0);
   // Rent from each property's CURRENT active lease only, so a superseded lease
   // left marked Active never double-counts the same space's rent.
-  const annualRent = currentLeases(leases)
+  const current = currentLeases(leases);
+  const annualRent = current
     .filter((l) => l.status === 'Active')
     .reduce((s, l) => s + (l.base_rent_annual || 0), 0);
 
   const today = new Date();
   const horizon = new Date();
   horizon.setMonth(horizon.getMonth() + 18);
-  const criticalDates = leases
+  const criticalDates = current
     .map((l) => ({
       leaseId: l.id,
       leaseName: l.lease_name,
@@ -194,7 +195,7 @@ export function dashboardFrom(
     counts: {
       properties: properties.length,
       leases: leases.length,
-      activeLeases: leases.filter((l) => l.status === 'Active').length,
+      activeLeases: current.filter((l) => l.status === 'Active').length,
       transactions: transactions.length,
     },
     totalSqft,
